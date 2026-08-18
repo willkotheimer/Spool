@@ -5,7 +5,7 @@ on by copying and play off one at a time, forwards or backwards, rearranging the
 Nothing it captures can leave the machine, and that property is enforced by the build, not by good
 intentions.
 
-Tauri v2 + React. Windows first, macOS once an Apple Developer account exists (M14). No cloud, no account, no telemetry, no model.
+Electron + React. Windows first, macOS once an Apple Developer account exists (M14). No cloud, no account, no telemetry, no model.
 
 ---
 
@@ -34,7 +34,8 @@ These hold at every commit. A change that breaks one is wrong even if it passes 
 1. **No network egress, ever.** The app contains no HTTP client, no socket, no telemetry, no
    updater. Enforced by CI (§5), not by discipline.
 2. **Nothing sensitive reaches disk without an explicit yes.** A clip classified sensitive lives in
-   memory only until the user decides. Declining zeroizes it.
+   memory only until the user decides. Declining wipes the buffer holding it — see §4 on why that
+   requires never letting it become a JavaScript string.
 3. **No privacy guard is a prohibition.** Every sensitivity guard is a prompt or a default. A user
    who wants to store a password can store a password. The capacity floor in §9 is the app's one
    hard gate, and it gates capture only — never access.
@@ -174,7 +175,7 @@ positives are acceptable. Silent capture of a secret is not.
 Non-blocking, appears inline in the compact window. Four choices:
 
 - **Keep once** — persist this clip
-- **Skip** — discard and zeroize
+- **Skip** — discard and wipe
 - **Always keep from `<app>`** — writes a source rule
 - **Always skip from `<app>`** — writes a source rule
 
@@ -184,6 +185,25 @@ keyboard, the safe default is not to write.
 
 Source rules are listed, editable, and revocable in settings. Per invariant 3, nothing here is
 permanent and nothing is forbidden.
+
+### Wiping a declined clip
+
+**JavaScript strings cannot be wiped.** They are immutable and garbage-collected, so a declined
+secret that ever became a `string` stays in the heap until the GC feels like it, and possibly into a
+swap file. Rust's `zeroize` had no cost; here it takes a design rule:
+
+> Sensitive clip content is carried as a `Buffer` from the moment the clipboard addon returns it, and
+> is never converted to a string before the user says Keep. On Skip, `buffer.fill(0)` and drop the
+> reference.
+
+That means the §4 detectors run against bytes, and the preview shown in the prompt is generated from
+a truncated copy that is wiped alongside the original. It also means the native addon of §8 must hand
+back a `Buffer` rather than a string — worth knowing before it is written, because changing it after
+is a rewrite of the capture path.
+
+This is weaker than `zeroize` and should be described as what it is: best-effort, defeated by a
+process dump or a swapped page. It is still far better than letting a password become an
+indefinitely-lived string.
 
 ### What counts as text, and what happens to everything else
 
@@ -273,80 +293,113 @@ flowchart LR
 The claim is not "we don't send your data." The claim is "there is no code here that could." Make it
 checkable.
 
-**a. Tauri CSP** in `tauri.conf.json`:
+**The guarantee changes shape on Electron, and it is worth being honest about how.** Node's `http`,
+`https`, `net`, `dgram`, and `fetch` are built into the runtime. They cannot be removed, so "no
+networking library is present" is not a claim this app can make. What it can do instead is *block the
+capability and prove the block by test*, which is weaker in principle and considerably more
+demonstrable in practice.
+
+**a. Renderer lockdown.** `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, and a
+CSP with no remote origins:
 
 ```
 default-src 'self'; connect-src 'none'; img-src 'self' data:;
 script-src 'self'; style-src 'self' 'unsafe-inline'
 ```
 
-**b. Capabilities** — no `tauri-plugin-http`, no `tauri-plugin-updater`, no `shell` open.
+**b. Session-level blocking.** In the main process, cancel every request the renderer can originate:
 
-**c. A CI gate**, `scripts/check-no-network.mjs`, which fails the build on:
+```js
+session.defaultSession.webRequest.onBeforeRequest((_details, cb) => cb({ cancel: true }));
+```
 
-- A Cargo dependency tree containing `reqwest`, `hyper`, `ureq`, `curl`, `tokio-tungstenite`,
-  `tauri-plugin-http`, or `tauri-plugin-updater`
-- Frontend source matching `fetch(`, `XMLHttpRequest`, `new WebSocket`, `navigator.sendBeacon`,
-  `EventSource`, or a URL passed to dynamic `import()`
-- A diff against a committed `cargo tree` snapshot, so any *new* transitive network dependency shows
+**c. A main-process guard.** At startup, before anything else runs, replace `http.request`,
+`https.request`, `net.connect`, `dgram.createSocket`, and `globalThis.fetch` with functions that
+throw. Any attempt to reach the network becomes a crash with a named error rather than a packet.
+**This is the part that is testable** — and being testable is what makes it worth more than the
+dependency-absence proof it replaces.
+
+**d. A CI gate**, `scripts/check-no-network.mjs`, which fails the build on:
+
+- Source in `src/**` matching `require('http')`, `require('https')`, `require('net')`, `fetch(`,
+  `XMLHttpRequest`, `new WebSocket`, `navigator.sendBeacon`, `EventSource`, or a URL passed to
+  dynamic `import()`
+- A production dependency named `axios`, `node-fetch`, `got`, `undici`, `ws`, `superagent`, or
+  `electron-updater`
+- A diff against a committed `npm ls --omit=dev` snapshot, so any *new* transitive dependency shows
   up as a reviewable change rather than a silent addition
 
-**d. No auto-updater.** A deliberate cost: updates are manual downloads. An updater is network code
-and would void a–c. Say so in the release notes rather than quietly shipping one.
+**e. No auto-updater.**
 
-**e. An in-app privacy panel**, reachable from the compact window in one click. Plain language, from
+A deliberate cost: updates are manual downloads. An updater is network code and would void a–d. Say
+so in the release notes rather than quietly shipping one. `electron-updater` is on the gate's
+banned list for exactly this reason.
+
+**f. An in-app privacy panel**, reachable from the compact window in one click. Plain language, from
 the user's side of the screen:
 
-> Nothing you copy leaves this computer. There is no code in this app that can send it anywhere —
-> no accounts, no sync, no analytics, no update checks. Your clips live in one encrypted file at
-> `<path>`, and the key is held in `<Windows Credential Manager | macOS Keychain>`.
+> Nothing you copy leaves this computer. This app blocks every network request it could make, and
+> the block is verified by a test that runs on every build — no accounts, no sync, no analytics, no
+> update checks. Your clips live in one encrypted file at `<path>`, and the key is held in
+> `<Windows Credential Manager | macOS Keychain>`.
 
 Plus: what the heuristics look for, the consent timeout, where the data file is, and a **Clear
 everything** button.
 
-**f.** Publish the passing gate and the dependency snapshot with each release.
+**g.** Publish the passing gate and the dependency snapshot with each release.
 
 ---
 
 ## 6. Architecture
 
 ```
-src-tauri/
-  src/
+src/
+  main/            Electron main process — Node, no DOM
     core/          pure — clip, spool, mode, cursor, reorder. no I/O.
     detect/        pure — sensitivity classification. no I/O.
-    clipboard/     OS listener and writer
-    store/         SQLite (SQLCipher), migrations, keychain
-    commands/      Tauri command handlers — thin
-    main.rs
-src/               React + TypeScript
-  components/      render only
-  helpers/         [ComponentName]Helper.ts — pure, tested
-  state/           useReducer store
+    clipboard/     watcher and writer (native addon — see §8)
+    store/         SQLite (SQLCipher), migrations, safeStorage
+    ipc/           IPC handlers — thin
+    guard.ts       the network kill switch of §5c, imported first
+    index.ts
+  preload/         the contextBridge surface — the only path between the two
+  renderer/        React + TypeScript
+    components/    render only
+    helpers/       [ComponentName]Helper.ts — pure, tested
+    state/         useReducer store
 scripts/
   check-no-network.mjs
 ```
 
 **Layering rules**
 
-- `core/` and `detect/` depend on neither `clipboard/`, `store/`, nor Tauri itself. Time is passed
-  in, never read.
-- Tauri commands are thin: parse, call `core`/`store`, return. No decisions.
+- `core/` and `detect/` import nothing from `clipboard/`, `store/`, or Electron itself. Time is
+  passed in, never read. They are plain TypeScript and testable with Vitest alone.
+- IPC handlers are thin: parse, call `core`/`store`, return. No decisions.
+- The renderer never touches Node. Everything crosses through `preload/` on an explicit, minimal
+  `contextBridge` surface — with `contextIsolation` on and `sandbox` on, that boundary is also a
+  security control, not just tidiness.
 - React components render. Anything worth testing lives in `helpers/` as a pure function.
-- Client state is `useReducer` plus Tauri events. No Redux.
+- Client state is `useReducer` plus IPC events. No Redux.
 
 **Dependencies**
 
 | Concern | Choice |
 |---|---|
-| Shell | Tauri v2 |
-| UI | React 19 + TypeScript, Vite |
+| Shell | Electron |
+| Build | `electron-vite` |
+| UI | React 19 + TypeScript |
 | Styling | Tailwind |
 | Drag and drop | `dnd-kit` — `react-beautiful-dnd` is unmaintained |
-| Database | `rusqlite` with SQLCipher |
-| Key storage | `keyring` crate → Credential Manager / Keychain |
-| Memory hygiene | `zeroize` for declined clips |
-| Tests | `cargo test` + `proptest`; Vitest for helpers; Tauri WebDriver for e2e |
+| Database | `better-sqlite3-multiple-ciphers` — `better-sqlite3` alone has no SQLCipher support |
+| Key storage | Electron's built-in `safeStorage` — DPAPI on Windows, Keychain on macOS. **Not `keytar`**, which is archived and unmaintained. |
+| Clipboard watching | a native addon — Electron's `clipboard` module cannot do it (§8) |
+| Packaging | `electron-builder` |
+| Tests | Vitest for `core/`, `detect/`, and helpers; `fast-check` for the M2 property test; Playwright's `_electron` for e2e |
+
+**The native-module tax.** `better-sqlite3-multiple-ciphers` and the clipboard addon are compiled
+against Electron's ABI, so both need `electron-rebuild` and both break on every Electron major
+version bump. Budget for it: this is the cost Electron charges in place of the one Rust would have.
 
 ---
 
@@ -435,6 +488,30 @@ to hook.
 That is not a minor convenience. Intercepting Ctrl+C globally would mean deciding what copy does in
 every application on the machine — including a terminal, where **Ctrl+C is interrupt, not copy.** An
 app that swallowed it would break signal-sending in every shell on the system.
+
+### Watching the clipboard on Electron
+
+**Electron's `clipboard` module reads and writes; it does not notify.** There is no change event, so
+the OS-level listener above is not reachable from Electron's own API. That leaves two routes, and the
+choice matters enough to make early:
+
+| Route | What it costs |
+|---|---|
+| **Poll** `clipboard.readText()` on a timer | Simple, pure JS, no native build. But it burns wakeups all day on a background app, misses two identical copies in a row, and — decisively — **cannot see the §4 Tier 1 concealed-clipboard formats**, so a password manager's marker is invisible and the whole consent model degrades to heuristics. |
+| **A native addon** wrapping `AddClipboardFormatListener` | Event-driven, no polling, and it can enumerate clipboard formats, which is the only way Tier 1 detection works. Costs a compiled module, `electron-rebuild`, and a rebuild on every Electron major. |
+
+**Take the native addon.** Invariant 2 depends on seeing what the source application declared, and
+polling cannot see it. The polling route would quietly turn the app's central safety promise into
+guesswork — which is the difference between a clipboard manager that is safe to run and one that is
+not.
+
+This is the same conclusion IDEA.md reached on 2026-08-06, for the same reason: use
+`AddClipboardFormatListener`, and specifically **not** the legacy `SetClipboardViewer` chain, which
+breaks whenever any app in the chain misbehaves.
+
+The addon is also where the source application name comes from, and it is macOS-specific work again
+at M14 — `NSPasteboard`'s `changeCount` and `org.nspasteboard.ConcealedType`. Neither platform's
+implementation is portable to the other.
 
 Paste is the interesting half. The model is two distinct keystrokes:
 
@@ -629,13 +706,17 @@ making its own promises.
 
 ### M0 — Scaffold
 
-Tauri v2 + React + TypeScript + Tailwind + Vitest, with CI running lint, tests, and build.
+Electron + `electron-vite` + React + TypeScript + Tailwind + Vitest, with CI running lint, tests, and
+build. Main, preload, and renderer split per §6 from the first commit — retrofitting
+`contextIsolation` onto a renderer that grew up with Node access is miserable.
 
-**In scope** — project skeleton, tray icon, summon hotkey, an empty compact window, CI workflow.
+**In scope** — project skeleton, tray icon, summon hotkey via `globalShortcut`, an empty compact
+window, CI workflow.
 **Out of scope** — clipboard, storage, any feature.
-**Acceptance** — `npm run tauri dev` opens a 360×420 window. The tray icon appears. The hotkey
-shows and hides the window. Closing hides to tray; tray Quit exits. CI is green.
-**Commit** — `Scaffold the Tauri shell with a tray icon and summon hotkey`
+**Acceptance** — `npm run dev` opens a 360×420 window. The tray icon appears. The hotkey shows and
+hides the window. Closing hides to tray; tray Quit exits. The renderer has no Node access —
+`window.require` is undefined and `process` is not reachable from DevTools. CI is green.
+**Commit** — `Scaffold the Electron shell with a tray icon and summon hotkey`
 
 ---
 
@@ -644,27 +725,32 @@ shows and hides the window. Closing hides to tray; tray Quit exits. CI is green.
 Establish invariant 1 **before** writing code that could violate it. Retrofitting this is far harder
 than starting with it.
 
-**In scope** — CSP and capability config per §5a–b; `scripts/check-no-network.mjs`; the committed
-`cargo tree` snapshot; the CI step; a static privacy panel with the §5e copy.
+**In scope** — the renderer lockdown and CSP of §5a; the session-level request block of §5b;
+`src/main/guard.ts` per §5c, imported before anything else; `scripts/check-no-network.mjs`; the
+committed `npm ls --omit=dev` snapshot; the CI step; a static privacy panel with the §5f copy.
 **Out of scope** — everything the panel describes but that does not exist yet. Write the copy for
 what M6 will build and leave the path placeholder resolving to a TODO.
-**Acceptance** — the gate runs in CI and passes. Temporarily adding `reqwest` to `Cargo.toml` fails
-the build; adding a `fetch(` call to any `src/**/*.ts` fails the build. Both are demonstrated and
-reverted. The privacy panel is reachable from the compact window.
+**Acceptance** — the gate runs in CI and passes. Adding `axios` to dependencies fails the build, and
+so does adding a `fetch(` call to any file under `src/`; both are demonstrated and reverted. **A test
+asserts that `fetch`, `http.request`, `https.request`, and `net.connect` each throw** — that test is
+the actual guarantee, since Node's networking cannot be removed the way a crate can. A renderer
+`fetch()` to any origin is cancelled by the session handler. The privacy panel is reachable from the
+compact window.
 **Commit** — `Assert the zero-network guarantee at build time`
 
 ---
 
 ### M2 — The spool core
 
-The headline test. Pure Rust, no I/O, no Tauri, no clipboard, no database.
+The headline test. Pure TypeScript in `src/main/core/` — no I/O, no Electron import, no clipboard, no
+database. It must be runnable by Vitest without launching the app at all.
 
 **In scope** — `Clip`, `Spool`, `Mode`, and operations: `capture`, `serve` (returns the clip and
-the next cursor), `reorder`, `delete_clip`, `set_mode`. Every cursor rule in §3, plus the caps and
+the next cursor), `reorder`, `deleteClip`, `setMode`. Every cursor rule in §3, plus the caps and
 eviction rules of §3 Limits — those are pure logic and belong here, not in the store.
 **Out of scope** — persistence, OS integration, UI.
-**Acceptance** — `cargo test` covers all eight rows of the §3 cursor table with explicit cases, plus
-a `proptest` asserting two properties over any series of captures, reorders, deletes, mode changes,
+**Acceptance** — Vitest covers all eight rows of the §3 cursor table with explicit cases, plus a
+`fast-check` property asserting two invariants over any series of captures, reorders, deletes, mode changes,
 and cap-triggered evictions: the cursor always points at a clip that exists or is null when the
 spool is empty — never a stale or out-of-range id — and clip count never exceeds the spool's
 cap. Rolling and refusing are both covered.
@@ -674,7 +760,9 @@ cap. Rolling and refusing are both covered.
 
 ### M3 — Capture
 
-**In scope** — OS clipboard listener; the text-flavour-first admission rule of §4 with all three
+**In scope** — the native clipboard addon of §8, wrapping `AddClipboardFormatListener` and returning
+content as a `Buffer` with the available format names; `electron-rebuild` in the build; the
+text-flavour-first admission rule of §4 with all three
 outcomes and their per-category notices; append to the in-memory default spool via the M2 core; the
 default spool's rolling cap and the 1 MiB per-clip limit from §3 Limits, both with visible
 feedback; the compact window renders the live spool and the mode pill; source application name
@@ -724,7 +812,7 @@ Lands before any disk write exists, so invariant 2 starts out trivially true and
 rather than retrofitted.
 
 **In scope** — `detect/` module implementing both tiers of §4, pure and unit-tested; the four-choice
-inline prompt; source rules held in memory; the 30-second timeout defaulting to Skip; `zeroize` on
+inline prompt; source rules held in memory; the 30-second timeout defaulting to Skip; buffer wiping on
 decline; the privacy panel's heuristic list filled in for real.
 **Out of scope** — persisting source rules (M6), the rules editor (M9).
 **Acceptance** — copying from a password manager raises a Tier 1 prompt naming the app. Copying a
@@ -737,15 +825,17 @@ pattern plus negative cases (ordinary prose, a URL, a code snippet must not trip
 
 ### M6 — Encrypted persistence
 
-**In scope** — SQLite via `rusqlite` with SQLCipher; key generated on first run and stored in the OS
-keychain; the §7 schema at `schema_version = 1`; a migration runner that reads `meta`; restore all
-spools, clips, cursors, modes, and source rules on launch; the privacy panel's path placeholder
-resolved to the real file location.
+**In scope** — SQLite via `better-sqlite3-multiple-ciphers` with SQLCipher; a key generated on first
+run and sealed with Electron's `safeStorage`; the §7 schema at `schema_version = 1`; a migration
+runner that reads `meta`; restore all spools, clips, cursors, modes, and source rules on launch; the
+privacy panel's path placeholder resolved to the real file location; `electron-rebuild` wired into
+the build so the native module survives a clean checkout.
 **Out of scope** — retention rules, clear-all.
 **Acceptance** — clips and cursor position survive a restart. The database file is not readable by
-`sqlite3` without the key. Deleting the keychain entry produces a clear, non-crashing error that
-explains the situation and offers to start a fresh store. A test asserts the migration runner is a
-no-op on an already-current file.
+plain `sqlite3` without the key. `safeStorage.isEncryptionAvailable()` is checked before use, and a
+false result gives a clear, non-crashing error rather than silently storing the key in plaintext.
+Losing the sealed key produces an explanation and an offer to start a fresh store. A test asserts the
+migration runner is a no-op on an already-current file. CI builds the native module from scratch.
 **Commit** — `Persist spools to an encrypted local database`
 
 ---
@@ -858,9 +948,9 @@ capture and Reset everything and must still not name a starred spool.
 The ship milestone. It depends on nothing that has to be bought from Apple, so v1 reaches real users
 without waiting on a developer account.
 
-**In scope** — a signed Windows installer via Azure Trusted Signing; a first-run screen carrying the
-§5e statement before any capture begins; release notes stating there is no auto-updater and why; and
-the upgrade test for invariant 5.
+**In scope** — an `electron-builder` NSIS installer signed via Azure Trusted Signing; a first-run
+screen carrying the §5f statement before any capture begins; release notes stating there is no
+auto-updater and why; and the upgrade test for invariant 5.
 **Out of scope** — an updater, deliberately. macOS, which is M14.
 **Acceptance** — the installer runs on a machine with no dev toolchain and the app launches. **It
 raises no SmartScreen warning** — an unsigned build reads as a student project regardless of what is
@@ -956,7 +1046,7 @@ Three remain. The first two are cheap now and a refactor later; the third is del
 
 1. **"Create reorder."** Read here as: save the current arrangement as a *new* named spool,
    leaving the original untouched. Confirm this rather than "start a new empty spool."
-2. **Linux.** Tauri supports it, but the concealed-clipboard markers of §4 have no portable
+2. **Linux.** Electron runs there, but the concealed-clipboard markers of §4 have no portable
    equivalent, and X11 versus Wayland clipboard access differs substantially. Deferred, not refused.
 3. **Opt-in serve-and-paste.** The two-step of §8 is the v1 default and needs no permissions. A single
    hotkey that serves and then synthesizes a paste is genuinely nicer to use, and it costs an
