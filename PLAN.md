@@ -565,10 +565,14 @@ All rebindable. The defaults deliberately avoid paste-adjacent combinations:
 
 | Action | Windows | macOS |
 |---|---|---|
-| Summon / dismiss | `Win + Shift + V` | `Ctrl + Option + V` |
-| Serve next clip | `Win + Shift + N` | `Ctrl + Option + N` |
-| Paste the whole spool (§3) | `Win + Shift + A` | `Ctrl + Option + A` |
-| Toggle FIFO / LIFO | `Win + Shift + M` | `Ctrl + Option + M` |
+| Summon / dismiss | `Win + Alt + V` or `Win + Alt + C` | `Ctrl + Option + V` or `Ctrl + Option + C` |
+| Serve next clip | `Win + Alt + N` | `Ctrl + Option + N` |
+| Paste the whole spool (§3) | `Win + Alt + A` | `Ctrl + Option + A` |
+| Toggle FIFO / LIFO | `Win + Alt + M` | `Ctrl + Option + M` |
+
+Summon carries two bindings on each platform, because both are things a hand reaches for: `V` for the
+paste-adjacent muscle memory, `C` for "clipboard". Either summons; neither is primary. The other three
+actions take one binding each.
 
 A global hotkey **shadows the foreground application**, so the defaults matter more than they look.
 Two hazards worth stating outright:
@@ -577,11 +581,19 @@ Two hazards worth stating outright:
   paste-and-match-style on macOS. Claiming it globally would break pasting in a terminal — which is why
   it is not the summon key despite being the obvious mnemonic.
 - `Ctrl + Alt` is `AltGr` on international keyboard layouts. Any `Ctrl+Alt+key` default would collide
-  with typing accented characters for a large share of users.
+  with typing accented characters for a large share of users — which is why the Windows column uses
+  `Win + Alt` and the hazard is confined to macOS, where `AltGr` does not exist.
+- **`Win + Shift + key` is not available on Windows at all.** The shell reserves the family —
+  `Win+Shift+V` cycles notifications, `Win+Shift+M` restores minimized windows — and
+  `globalShortcut.register` returns `false` for `V`, `N`, `A`, and `M` alike. Measured on Windows 11
+  at M0, which is why the Windows column reads `Win + Alt`; `Win+Alt+key` registers cleanly and
+  collides with neither hazard above.
 
 Registration can still fail if another application already owns a combination. **A failed registration
 must be surfaced, not swallowed** — a silently dead hotkey is the worst outcome, because the user
 concludes the app is broken. On failure, say which combination was refused and open the rebinding UI.
+An action with two bindings is live as long as one of them is claimed, and the refused one is still
+named — a half-working hotkey the user cannot see the shape of is its own kind of broken.
 
 ---
 

@@ -2,11 +2,9 @@
 node_modules/
 dist/
 dist-ssr/
+out/
 *.local
-
-# Rust / Tauri
-target/
-src-tauri/target/
+*.tsbuildinfo
 
 # Editors
 .idea/
