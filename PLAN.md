@@ -5,13 +5,13 @@ on by copying and play off one at a time, forwards or backwards, rearranging the
 Nothing it captures can leave the machine, and that property is enforced by the build, not by good
 intentions.
 
-Windows and macOS. Tauri v2 + React. No cloud, no account, no telemetry, no model.
+Tauri v2 + React. Windows first, macOS once an Apple Developer account exists (M14). No cloud, no account, no telemetry, no model.
 
 ---
 
 ## How to work this spec
 
-This is **not** a one-shot specification. It is fourteen milestones, each one a single git push that
+This is **not** a one-shot specification. It is fifteen milestones, each one a single git push that
 leaves a working application behind.
 
 - Implement exactly one milestone per working session. Stop at its end.
@@ -853,19 +853,42 @@ capture and Reset everything and must still not name a starred spool.
 
 ---
 
-### M13 — Packaging
+### M13 — Windows packaging
 
-**In scope** — signed installers for Windows and macOS, macOS notarization; a first-run screen
-carrying the §5e statement before any capture begins; release notes stating there is no auto-updater
-and why; and the upgrade test for invariant 5.
-**Out of scope** — an updater. Deliberately.
-**Acceptance** — the installer runs on a machine with no dev toolchain and the app launches. macOS
-shows no unidentified-developer warning. First run shows the privacy statement before the clipboard
-listener starts. **The upgrade test**: check out M6, run the app, capture clips, quit; check out
-M13, launch against that same data file, and confirm every clip and cursor survives the v1 → v3
-migration path. This is the
+The ship milestone. It depends on nothing that has to be bought from Apple, so v1 reaches real users
+without waiting on a developer account.
+
+**In scope** — a signed Windows installer via Azure Trusted Signing; a first-run screen carrying the
+§5e statement before any capture begins; release notes stating there is no auto-updater and why; and
+the upgrade test for invariant 5.
+**Out of scope** — an updater, deliberately. macOS, which is M14.
+**Acceptance** — the installer runs on a machine with no dev toolchain and the app launches. **It
+raises no SmartScreen warning** — an unsigned build reads as a student project regardless of what is
+inside it. First run shows the privacy statement before the clipboard listener starts. **The upgrade
+test**: check out M6, run the app, capture clips, quit; check out M13, launch against that same data
+file, and confirm every clip and cursor survives the v1 → v3 migration path. This is the
 QuickBooks-desktop problem, and it is the criterion that matters most in this milestone.
-**Commit** — `Package signed installers and verify the data file survives upgrade`
+**Commit** — `Package a signed Windows installer and verify the data file survives upgrade`
+
+---
+
+### M14 — macOS packaging
+
+**Gated on an Apple Developer Program membership**, which is required for a Developer ID certificate
+and for notarization; software distributed outside the Mac App Store will not launch without both. No
+Mac is needed to build it — GitHub Actions provides macOS runners that can `codesign` and
+`notarytool` — but the membership has no workaround. Do this when that account exists, and ship M13
+in the meantime.
+
+**In scope** — a Developer ID–signed `.app` and `.dmg`; hardened runtime and the entitlements
+notarization requires; stapling the ticket; the macOS half of CI.
+**Out of scope** — the Mac App Store, which is separate review with its own sandbox rules.
+**Acceptance** — the `.dmg` opens on a Mac that has never seen the app and **shows no
+unidentified-developer warning**. `spctl --assess --verbose` reports it as accepted. The §4
+concealed-clipboard path is verified against a real macOS password manager rather than a stub — that
+is the one part of this spec that has never run on the platform it was written for. The M13 upgrade
+test is repeated on macOS against its own data file.
+**Commit** — `Package a notarized macOS build`
 
 ---
 
