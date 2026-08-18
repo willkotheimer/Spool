@@ -1,9 +1,9 @@
 # Spool
 
 A local-only clipboard manager built around **spools** — named, ordered lists of clips that you wind
-on by copying and play off one at a time, forwards or backwards, rearranging them by dragging.
-Nothing it captures can leave the machine, and that property is enforced by the build, not by good
-intentions.
+on by copying and play off one at a time — or all at once, in the order you arranged them — forwards
+or backwards, rearranging by dragging. Nothing it captures can leave the machine, and that property
+is enforced by the build, not by good intentions.
 
 Electron + React. Windows first, macOS once an Apple Developer account exists (M14). No cloud, no account, no telemetry, no model.
 
@@ -108,6 +108,31 @@ specified exhaustively and tested in M2:
 
 Storing the cursor as a clip id rather than an integer is what makes reorder and delete fall out
 correctly instead of needing special cases.
+
+### Pasting a whole spool
+
+The other half of the product, and the reason reordering exists: collect a scattered set of values,
+arrange them, and put them back into one document in the right order.
+
+**It joins and writes once.** Every clip in the spool is concatenated with a separator and written to
+the system clipboard as a single item. The user then pastes normally, once. The alternative —
+synthesising one paste per clip — is rejected for the same reason serve-and-paste is (§8): it needs
+input-synthesis permission, and it cannot know where the caret should go between clips anyway.
+Joining needs nothing the app does not already have.
+
+| Rule | Behavior |
+|---|---|
+| Order | Position order, travelling in the mode's direction: from position 0 forward in `fifo`, from the last position backward in `lifo`. |
+| Starting point | **Always the beginning, never the cursor.** "Paste everything" means everything; starting mid-spool would silently drop the clips behind it. |
+| Cursor | Does not move. This is a bulk read, not a traversal. |
+| Empty spool | No-op, with the same *nothing to paste* message as a single serve. |
+| Separator | A global setting, default a newline. Also offered: blank line, tab, comma, space, and none. A spool of spreadsheet cells wants a tab; a spool of paragraphs wants a blank line. |
+| Size | If the joined result exceeds 10 MiB, confirm before writing. The clipboard is shared with every application on the machine, and an enormous item is felt system-wide. |
+| Self-capture | M4's suppression must cover it. The joined text must not return as a new clip — which would be a spool that doubles itself every time it is used. |
+
+The separator is deliberately a global setting rather than a per-spool column: it is worth neither a
+schema version nor a migration, and a per-paste override in the button covers the case where one
+spool differs.
 
 ### Limits
 
@@ -542,6 +567,7 @@ All rebindable. The defaults deliberately avoid paste-adjacent combinations:
 |---|---|---|
 | Summon / dismiss | `Win + Shift + V` | `Ctrl + Option + V` |
 | Serve next clip | `Win + Shift + N` | `Ctrl + Option + N` |
+| Paste the whole spool (§3) | `Win + Shift + A` | `Ctrl + Option + A` |
 | Toggle FIFO / LIFO | `Win + Shift + M` | `Ctrl + Option + M` |
 
 A global hotkey **shadows the foreground application**, so the defaults matter more than they look.
@@ -840,18 +866,29 @@ migration runner is a no-op on an already-current file. CI builds the native mod
 
 ---
 
-### M7 — The reorder surface
+### M7 — Arrange and paste the whole spool
+
+Arranging and emitting are one concern: reordering exists so the whole spool can come out in the
+order you chose. This is the milestone where the pitch — collect, arrange, paste it all back —
+actually works.
 
 **In scope** — the expanded window; the full clip list with `dnd-kit` drag handles; **save reorder**
 applies the arrangement to the active spool; **create reorder** saves the arrangement as a new
 named spool and leaves the original untouched; the compact ↔ expanded transition and remembered
-state; keyboard-accessible reordering as well as pointer drag.
-**Out of scope** — creating, renaming, or deleting spools by other means.
+state; keyboard-accessible reordering as well as pointer drag; **paste the whole spool** per §3, with
+its hotkey, a button in both windows, the global separator setting, and the 10 MiB confirmation.
+**Out of scope** — creating, renaming, or deleting spools by other means. Any synthesized paste.
 **Acceptance** — dragging a clip and saving persists the new order across a restart, and the cursor
 still points at the clip it pointed at before the drag (§3). Create reorder produces a second
 spool with the new order while the original keeps the old one. Reordering works from the keyboard
 alone. Positions in the database remain dense and 0-based.
-**Commit** — `Expand to a reorder surface with drag-and-drop ordering`
+
+Then the whole-spool paste: a spool of five clips lands as five separated lines in one Ctrl+V.
+Switching to `lifo` reverses the emitted order. **It starts at position 0 regardless of where the
+cursor sits, and leaves the cursor untouched.** Changing the separator to tab produces one
+tab-delimited line. Pasting a whole spool **does not add a clip to it** — run it ten times and the
+count is unchanged, which is the M4 suppression holding against a payload that matches no single clip.
+**Commit** — `Paste a whole spool in the order you arranged it`
 
 ---
 
@@ -890,7 +927,7 @@ that app to prompt again.
 ### M10 — The capacity advisor
 
 Also the milestone that makes invariant 5 testable: it introduces the first real schema change, so
-M11's upgrade test verifies a genuine v1 → v2 migration instead of two identical schemas.
+M13's upgrade test verifies a genuine migration instead of two identical schemas.
 
 **In scope** — `last_used_at` on spools as `schema_version = 2` with a forward migration; store
 size and cap accounting; the 90% trigger and per-measure snooze; the §9 modal with multi-select and a
