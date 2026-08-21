@@ -3,6 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      The renderer lockdown of PLAN.md 5a. No remote origin is reachable from this document: with
+      `connect-src 'none'` there is no origin any outbound browser API could reach.
+      electron.vite.config.ts relaxes exactly this policy while the Vite dev server is serving, and
+      only there — the shipped HTML is what you see here.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'none'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
     <title>Spool</title>
   </head>
   <body>
