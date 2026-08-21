@@ -1,0 +1,18 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-spool-ink: #171614;
+  --color-spool-paper: #f5f2ec;
+  --color-spool-thread: #c9762f;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+  user-select: none;
+}
