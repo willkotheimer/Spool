@@ -15,7 +15,6 @@
     "test": "vitest run",
     "check:network": "node scripts/check-no-network.mjs"
   },
-  "dependencies": {},
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.3",
@@ -26,6 +25,7 @@
     "electron-vite": "^5.0.0",
     "eslint": "^10.8.1",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "fast-check": "^4.9.0",
     "globals": "^17.11.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

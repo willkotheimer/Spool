@@ -36,6 +36,7 @@ above. Updates are manual downloads.
 
 ## Status
 
-M1 — the zero-network gate, and the privacy panel that describes it. The scaffold from M0 is
-underneath: tray icon, summon hotkey, an empty compact window. No clipboard capture and no storage
-yet; those arrive at M3 and M6.
+M2 — the spool core: FIFO and LIFO cursor travel, reorder, deletion, and the clip caps, as pure
+TypeScript in `src/main/core/` with no I/O and no Electron import. Underneath it are M1's
+zero-network gate and privacy panel, and M0's tray icon, summon hotkey, and compact window. No
+clipboard capture and no storage yet; those arrive at M3 and M6.

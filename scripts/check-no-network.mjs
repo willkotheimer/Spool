@@ -118,7 +118,10 @@ function checkSnapshot(tree) {
 
   let committed
   try {
-    committed = readFileSync(SNAPSHOT, 'utf8')
+    // Normalise line endings: git checks this file out with CRLF on Windows and LF elsewhere, and
+    // a gate that fails on the checkout's line endings would fail on one CI runner and not the
+    // other, which teaches everyone to ignore it.
+    committed = readFileSync(SNAPSHOT, 'utf8').replace(/\r\n/g, '\n')
   } catch {
     fail('deps-snapshot.json is missing. Run `npm run check:network -- --update-snapshot`.')
     return

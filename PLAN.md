@@ -99,6 +99,7 @@ specified exhaustively and tested in M2:
 |---|---|
 | Capture, `fifo` | Clip appended at end. Cursor does not move. |
 | Capture, `lifo` | Clip appended at end and becomes the cursor target — it is now newest. |
+| Capture into an **empty** spool | The clip takes the cursor in either mode. "Cursor does not move" has nothing to say about a null cursor, and leaving it null would make the spool unservable. Settled at M2. |
 | Delete the clip at the cursor | Cursor moves to the next clip in the mode's direction. If none, clamps to the nearest end. |
 | Delete any other clip | Cursor stays on the same clip. Its index may shift; its identity does not. |
 | Reorder | Cursor follows the clip it pointed at, wherever it lands. |
