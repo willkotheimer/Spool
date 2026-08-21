@@ -335,8 +335,25 @@ script-src 'self'; style-src 'self' 'unsafe-inline'
 **b. Session-level blocking.** In the main process, cancel every request the renderer can originate:
 
 ```js
-session.defaultSession.webRequest.onBeforeRequest((_details, cb) => cb({ cancel: true }));
+session.defaultSession.webRequest.onBeforeRequest((details, cb) =>
+  cb({ cancel: !isLocalScheme(details.url) })
+);
 ```
+
+**The rule is by scheme, not "cancel everything".** Chromium routes more than network traffic through
+this handler: the packaged renderer loads its own HTML, JS, and CSS over `file:`, and DevTools loads
+over `devtools:`. A literal `cancel: true` blocks the app from loading itself. So `file:`,
+`devtools:`, `blob:`, `data:`, and `about:` pass, and everything else is cancelled — measured at M1,
+where a renderer navigation to a remote origin returns `ERR_BLOCKED_BY_CLIENT`.
+
+In development the renderer is served by Vite over `http://localhost`, so that one origin is allowed
+through as well, derived from `ELECTRON_RENDERER_URL` and ignored when the app is packaged. The same
+milestone found that the shipped CSP in **a** also has to be relaxed for the dev server alone — Vite
+injects an inline preload script and opens a hot-reload socket, which `script-src 'self'` and
+`connect-src 'none'` correctly refuse. The relaxation lives in the build config, applies only while
+the dev server is serving, and widens `connect-src` to localhost rather than to `ws:` at large. **The
+HTML that ships carries the policy exactly as written in a**, and a remote-origin `fetch` is refused
+in development too.
 
 **c. A main-process guard.** At startup, before anything else runs, replace `http.request`,
 `https.request`, `net.connect`, `dgram.createSocket`, and `globalThis.fetch` with functions that
@@ -348,7 +365,10 @@ dependency-absence proof it replaces.
 
 - Source in `src/**` matching `require('http')`, `require('https')`, `require('net')`, `fetch(`,
   `XMLHttpRequest`, `new WebSocket`, `navigator.sendBeacon`, `EventSource`, or a URL passed to
-  dynamic `import()`
+  dynamic `import()`. The guard of **c** is the one file that must name those APIs in order to revoke
+  them, so it and its test are exempt **by exact path** — an exemption that cannot spread by accident
+  is the only kind worth having. The scan reads whole lines, comments included: prose that names a
+  banned API fails the build, which is blunt and correct.
 - A production dependency named `axios`, `node-fetch`, `got`, `undici`, `ws`, `superagent`, or
   `electron-updater`
 - A diff against a committed `npm ls --omit=dev` snapshot, so any *new* transitive dependency shows

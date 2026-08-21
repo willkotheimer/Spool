@@ -1,4 +1,9 @@
-import { app, BrowserWindow } from 'electron'
+// The kill switch of PLAN.md 5c, revoked before any other statement in the process runs.
+import { blockSessionRequests, installNetworkGuard } from './guard'
+
+installNetworkGuard()
+
+import { app, BrowserWindow, session } from 'electron'
 import { registerHotkeys, unregisterHotkeys } from './hotkeys'
 import { createTray } from './tray'
 import { createCompactWindow, showCompactWindow } from './window'
@@ -11,6 +16,13 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(() => {
     app.setAppUserModelId('com.spool.app')
+
+    // Cancel every request the renderer can originate (PLAN.md 5b).
+    blockSessionRequests(
+      session.defaultSession,
+      process.env['ELECTRON_RENDERER_URL'],
+      app.isPackaged
+    )
 
     createCompactWindow()
     createTray()

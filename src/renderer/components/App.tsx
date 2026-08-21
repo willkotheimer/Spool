@@ -1,11 +1,18 @@
-import type { JSX } from 'react'
+import { useState, type JSX } from 'react'
+import { PrivacyPanel } from './PrivacyPanel'
 
 /**
- * The compact window (PLAN.md 8). Empty at M0 by design: it holds the shell the later milestones
- * fill in — the active spool, its mode pill, and the clip that serves next.
+ * The compact window (PLAN.md 8). Still empty of clips at M1 by design: it holds the shell the
+ * later milestones fill in — the active spool, its mode pill, and the clip that serves next — plus
+ * the privacy affordance, which is reachable in one click from here (PLAN.md 5f).
  */
 export function App(): JSX.Element {
-  const summonHotkey = window.spool.summonHotkey
+  const [showPrivacy, setShowPrivacy] = useState(false)
+  const { summonHotkey, platform } = window.spool
+
+  if (showPrivacy) {
+    return <PrivacyPanel platform={platform} onBack={() => setShowPrivacy(false)} />
+  }
 
   return (
     <main className="flex h-full flex-col bg-spool-ink text-spool-paper">
@@ -19,8 +26,15 @@ export function App(): JSX.Element {
         <p className="text-sm text-spool-paper/70">Nothing captured yet.</p>
       </div>
 
-      <footer className="px-4 pb-4 text-[11px] text-spool-paper/40">
-        {summonHotkey} shows and hides this window.
+      <footer className="flex items-center justify-between px-4 pb-4 text-[11px] text-spool-paper/40">
+        <span>{summonHotkey} shows and hides this window.</span>
+        <button
+          type="button"
+          onClick={() => setShowPrivacy(true)}
+          className="rounded px-2 py-1 text-spool-thread hover:bg-spool-paper/10"
+        >
+          Privacy
+        </button>
       </footer>
     </main>
   )

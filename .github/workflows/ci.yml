@@ -23,6 +23,9 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Zero-network gate
+        run: npm run check:network
+
       - name: Lint
         run: npm run lint
 
