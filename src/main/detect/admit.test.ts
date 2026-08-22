@@ -3,8 +3,12 @@ import { admit, isDuplicate, type ClipboardSnapshot } from './admit'
 
 const snapshot = (formats: string[], text: string | null = null): ClipboardSnapshot => ({
   formats,
-  text
+  bytes: text === null ? null : new TextEncoder().encode(text)
 })
+
+/** Admission hands back bytes, never a string (PLAN.md 4) — decode to read them in a test. */
+const admittedText = (result: ReturnType<typeof admit>): string | null =>
+  result.admit ? new TextDecoder().decode(result.bytes) : null
 
 // The worked cases of PLAN.md 4 — "because these are what implementations get wrong".
 describe('the worked cases (PLAN.md 4)', () => {
@@ -13,7 +17,7 @@ describe('the worked cases (PLAN.md 4)', () => {
       snapshot(['CF_UNICODETEXT', 'CF_TEXT', 'HTML Format', 'CF_DIB'], 'A paragraph.')
     )
 
-    expect(result).toEqual({ admit: true, text: 'A paragraph.' })
+    expect(admittedText(result)).toBe('A paragraph.')
   })
 
   it('captures the tab-delimited flavour of a range of Excel cells', () => {
@@ -22,14 +26,13 @@ describe('the worked cases (PLAN.md 4)', () => {
       'a\tb\tc\n1\t2\t3'
     )
 
-    expect(admit(excel)).toEqual({ admit: true, text: 'a\tb\tc\n1\t2\t3' })
+    expect(admittedText(admit(excel))).toBe('a\tb\tc\n1\t2\t3')
   })
 
   it('captures selected text in a PDF reader', () => {
-    expect(admit(snapshot(['CF_UNICODETEXT'], 'Selected sentence.'))).toEqual({
-      admit: true,
-      text: 'Selected sentence.'
-    })
+    expect(admittedText(admit(snapshot(['CF_UNICODETEXT'], 'Selected sentence.')))).toBe(
+      'Selected sentence.'
+    )
   })
 
   it('declines a region of a PDF copied as a picture', () => {
@@ -48,10 +51,9 @@ describe('the worked cases (PLAN.md 4)', () => {
   })
 
   it('takes the text of an embedded object when there is one, and declines when there is not', () => {
-    expect(admit(snapshot(['Embed Source', 'CF_DIB', 'CF_UNICODETEXT'], 'Chart title'))).toEqual({
-      admit: true,
-      text: 'Chart title'
-    })
+    expect(admittedText(admit(snapshot(['Embed Source', 'CF_DIB', 'CF_UNICODETEXT'], 'Chart title')))).toBe(
+      'Chart title'
+    )
     expect(admit(snapshot(['Embed Source', 'CF_DIB']))).toEqual({ admit: false, reason: 'image' })
   })
 })
@@ -88,14 +90,13 @@ describe('admit', () => {
   })
 
   it('keeps whitespace, which is a real thing to copy', () => {
-    expect(admit(snapshot(['CF_UNICODETEXT'], '\t'))).toEqual({ admit: true, text: '\t' })
+    expect(admittedText(admit(snapshot(['CF_UNICODETEXT'], '\t')))).toBe('\t')
   })
 
   it('reads macOS pasteboard types too, for M14', () => {
-    expect(admit(snapshot(['public.utf8-plain-text'], 'from a Mac'))).toEqual({
-      admit: true,
-      text: 'from a Mac'
-    })
+    expect(admittedText(admit(snapshot(['public.utf8-plain-text'], 'from a Mac')))).toBe(
+      'from a Mac'
+    )
     expect(admit(snapshot(['public.file-url']))).toEqual({ admit: false, reason: 'file' })
   })
 })

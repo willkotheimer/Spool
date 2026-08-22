@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  DATA_FILE_PATH,
-  dataFileDescription,
-  keyStoreName,
-  type Platform
-} from './PrivacyPanelHelper'
+import { dataFileDescription, keyStoreName, type Platform } from './PrivacyPanelHelper'
 
 describe('keyStoreName', () => {
   it.each([
@@ -18,7 +13,7 @@ describe('keyStoreName', () => {
 
 describe('dataFileDescription', () => {
   it('states the absence rather than inventing a path', () => {
-    expect(dataFileDescription(DATA_FILE_PATH)).toMatch(/no file yet/i)
+    expect(dataFileDescription(null)).toMatch(/no file yet/i)
   })
 
   it('prints the path once there is one', () => {

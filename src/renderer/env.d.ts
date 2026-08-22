@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { AppState } from '../shared/ipc'
+import type { AppState, ConsentChoice } from '../shared/ipc'
 
 declare global {
   interface SpoolApi {
@@ -9,6 +9,7 @@ declare global {
     readonly serveHotkey: string
     readonly modeHotkey: string
     getState(): Promise<AppState>
+    answerConsent(choice: ConsentChoice): Promise<void>
     onState(listener: (state: AppState) => void): () => void
   }
 

@@ -193,8 +193,20 @@ Pattern or entropy match. Lower confidence, softer wording: *"This looks like a 
 - Connection strings — `Password=`, `pwd=`, `Server=…;`
 - High Shannon entropy: 16–200 chars, no whitespace, mixed character classes
 
-Every heuristic must be listed in the privacy panel so the user knows what trips it. False
-positives are acceptable. Silent capture of a secret is not.
+Every heuristic must be listed in the privacy panel so the user knows what trips it — and the panel
+takes that list **from the detectors themselves**, so the disclosure cannot drift from the code.
+False positives are acceptable. Silent capture of a secret is not.
+
+**Two exclusions, added at M5 after measuring what the entropy rule catches.** A URL and an absolute
+file path both score like generated strings — no whitespace, mixed character classes, high entropy —
+and a developer copies both many times a day. A prompt that fires on all of them teaches the user to
+dismiss prompts, which costs more than it saves. The path exclusion is deliberately narrow: it
+recognises only what a path *starts* with (`C:\…`, `/…`, `\server\…`), because checking for slashes
+anywhere would be a hole — an AWS secret key is full of them.
+
+**A newer copy supersedes an unanswered prompt**, and the superseded clip is treated as Skip and
+wiped. The user moved on; holding a queue of unanswered secrets in memory is the opposite of what
+this section is for.
 
 ### The prompt
 
@@ -208,6 +220,10 @@ Non-blocking, appears inline in the compact window. Four choices:
 Until the user answers, the clip is memory-only and marked pending. If unanswered for 30 seconds
 (configurable, disclosed in the privacy panel) it is treated as **Skip** — when nobody is at the
 keyboard, the safe default is not to write.
+
+**The prompt shows no content.** Tier 1 names the application and Tier 2 names the rule that matched;
+neither displays the clip. A prompt asking whether to keep a secret has no business putting that
+secret on screen, and it does not need to: the user knows what they just copied.
 
 Source rules are listed, editable, and revocable in settings. Per invariant 3, nothing here is
 permanent and nothing is forbidden.

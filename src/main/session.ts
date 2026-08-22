@@ -1,11 +1,26 @@
 import { randomUUID } from 'node:crypto'
-import type { AppState, Notice } from '../shared/ipc'
-import { captureSnapshot, type CaptureState } from './clipboard/capture'
+import type { AppState, ConsentChoice, Notice, PendingPrompt } from '../shared/ipc'
+import {
+  captureSnapshot,
+  initialCaptureState,
+  keep,
+  type CaptureOutcome,
+  type CaptureState,
+  type PendingConsent
+} from './clipboard/capture'
 import { loadClipboardWatcher, type ClipboardWatcher, type WatcherLoad } from './clipboard/watcher'
 import { createSpool, serve, setMode } from './core/spool'
 import type { Mode } from './core/types'
 import type { ClipboardSnapshot } from './detect/admit'
+import { wipe } from './detect/bytes'
+import {
+  CONSENT_TIMEOUT_MS,
+  keepsTheClip,
+  promptWording,
+  ruleFromChoice
+} from './detect/consent'
 import { emptyLedger, NOTHING_TO_PASTE } from './detect/notices'
+import { HEURISTIC_RULES } from './detect/sensitivity'
 import { toSpoolView } from './ipc/view'
 
 /**
@@ -17,22 +32,19 @@ import { toSpoolView } from './ipc/view'
  * `clipboard/capture.ts` and `core/`; this is wiring.
  */
 export class Session {
-  private state: CaptureState = {
-    spool: createSpool({
-      id: 'default',
-      name: 'Default spool',
-      kind: 'default',
-      mode: 'fifo'
-    }),
-    lastCapturedText: null,
-    ledger: emptyLedger,
-    pendingSelfWrite: null
-  }
+  private state: CaptureState = initialCaptureState(
+    createSpool({ id: 'default', name: 'Default spool', kind: 'default', mode: 'fifo' }),
+    emptyLedger
+  )
 
   private notice: Notice | null = null
   private capture: AppState['capture'] = { available: false, reason: 'capture has not started yet' }
   private watcher: ClipboardWatcher | null = null
   private readonly listeners = new Set<(state: AppState) => void>()
+
+  /** The clip waiting on an answer, held as bytes so that declining can wipe it (PLAN.md 4). */
+  private pending: PendingConsent | null = null
+  private pendingTimer: ReturnType<typeof setTimeout> | null = null
 
   /**
    * `writeText` is injected rather than imported so that this class never reaches for Electron —
@@ -57,23 +69,51 @@ export class Session {
   stopCapture(): void {
     this.watcher?.stop()
     this.watcher = null
+    this.clearPending()
   }
 
   /** Exposed for the IPC layer and for tests, which drive it with snapshots directly. */
   onClipboardChange(snapshot: ClipboardSnapshot): void {
-    const outcome = captureSnapshot(this.state, snapshot, {
-      now: () => new Date().toISOString(),
-      newId: () => randomUUID()
-    })
+    const outcome = captureSnapshot(this.state, snapshot, this.deps)
 
-    this.state = outcome.state
+    this.absorb(outcome)
+  }
 
-    // A notice stands until the next successful capture replaces it, so a decline the user did not
-    // look at is not lost to the next copy.
-    if (outcome.notice !== null) this.notice = outcome.notice
-    else if (outcome.captured !== null) this.notice = null
+  /**
+   * Answer the prompt (PLAN.md 4). Keep files the clip; Skip wipes the bytes; the two "always"
+   * choices do the same and leave a standing answer for that application behind.
+   *
+   * Nothing here is permanent and nothing is forbidden — a user who wants to store a password can
+   * store a password (invariant 3).
+   */
+  answerConsent(choice: ConsentChoice): void {
+    const pending = this.pending
+    if (pending === null) return
 
-    this.publish()
+    // Only the timer is cancelled here. Clearing would wipe the bytes, and Keep still needs them:
+    // they are wiped below, once the clip has been filed.
+    this.cancelPendingTimer()
+    this.pending = null
+
+    const rule = ruleFromChoice(choice)
+    if (rule !== null && pending.sourceApp !== null) {
+      this.state = {
+        ...this.state,
+        sourceRules: new Map(this.state.sourceRules).set(pending.sourceApp, rule)
+      }
+    }
+
+    if (keepsTheClip(choice)) {
+      this.absorb(
+        keep(this.state, pending.bytes, pending.sourceApp, true, this.deps, null, pending.capturedAt)
+      )
+    } else {
+      this.publish()
+    }
+
+    // Wiped either way: once the clip is a string in the spool, the buffer that carried it there
+    // has no further use, and leaving a copy of a secret lying around is the thing being avoided.
+    wipe(pending.bytes)
   }
 
   /**
@@ -116,8 +156,73 @@ export class Session {
     return {
       spool: toSpoolView(this.state.spool),
       notice: this.notice,
-      capture: this.capture
+      capture: this.capture,
+      prompt: this.promptView(),
+      privacy: {
+        heuristics: HEURISTIC_RULES,
+        consentTimeoutSeconds: Math.round(CONSENT_TIMEOUT_MS / 1000),
+        // The encrypted store arrives at M6; until then the panel says so rather than naming a
+        // file that is not there (PLAN.md 11, M1).
+        dataFilePath: null
+      }
     }
+  }
+
+  private promptView(): PendingPrompt | null {
+    if (this.pending === null) return null
+
+    const { headline, detail } = promptWording(this.pending.sensitivity, this.pending.sourceApp)
+    return {
+      tier: this.pending.sensitivity.tier,
+      headline,
+      detail,
+      sourceApp: this.pending.sourceApp,
+      timeoutSeconds: Math.round(CONSENT_TIMEOUT_MS / 1000)
+    }
+  }
+
+  /** Take an outcome from the pipeline and become it. */
+  private absorb(outcome: CaptureOutcome): void {
+    this.state = outcome.state
+
+    if (outcome.pending !== null) {
+      // A new copy while a prompt is open supersedes it: the user moved on, and the safe reading
+      // of an unanswered prompt is Skip (PLAN.md 4). The superseded bytes go now.
+      this.clearPending()
+      this.pending = outcome.pending
+      this.pendingTimer = setTimeout(() => {
+        // When nobody is at the keyboard, the safe default is not to write.
+        this.answerConsent('skip')
+      }, CONSENT_TIMEOUT_MS)
+    }
+
+    // A notice stands until the next successful capture replaces it, so a decline the user did not
+    // look at is not lost to the next copy.
+    if (outcome.notice !== null) this.notice = outcome.notice
+    else if (outcome.captured !== null) this.notice = null
+
+    this.publish()
+  }
+
+  private cancelPendingTimer(): void {
+    if (this.pendingTimer !== null) {
+      clearTimeout(this.pendingTimer)
+      this.pendingTimer = null
+    }
+  }
+
+  /** Drop the pending clip and its timer, wiping the bytes it was holding. */
+  private clearPending(): void {
+    this.cancelPendingTimer()
+    if (this.pending !== null) {
+      wipe(this.pending.bytes)
+      this.pending = null
+    }
+  }
+
+  private readonly deps = {
+    now: () => new Date().toISOString(),
+    newId: () => randomUUID()
   }
 
   onChange(listener: (state: AppState) => void): () => void {

@@ -1,12 +1,6 @@
 import type { JSX, ReactNode } from 'react'
-import {
-  CONSENT_TIMEOUT_SECONDS,
-  DATA_FILE_PATH,
-  HEURISTICS,
-  dataFileDescription,
-  keyStoreName,
-  type Platform
-} from '../helpers/PrivacyPanelHelper'
+import type { PrivacyFacts } from '../../shared/ipc'
+import { dataFileDescription, keyStoreName, type Platform } from '../helpers/PrivacyPanelHelper'
 
 /**
  * The in-app privacy panel (PLAN.md 5f), in plain language from the user's side of the screen.
@@ -15,9 +9,11 @@ import {
  */
 export function PrivacyPanel({
   platform,
+  privacy,
   onBack
 }: {
   platform: Platform
+  privacy: PrivacyFacts
   onBack: () => void
 }): JSX.Element {
   return (
@@ -45,7 +41,7 @@ export function PrivacyPanel({
         </p>
 
         <Section title="Where your clips live">
-          <p className="text-spool-paper/70">{dataFileDescription(DATA_FILE_PATH)}</p>
+          <p className="text-spool-paper/70">{dataFileDescription(privacy.dataFilePath)}</p>
           <p className="text-spool-paper/70">
             When storage arrives, clips live in one encrypted file and the key is held in{' '}
             {keyStoreName(platform)} — never in a file, a constant, or the database itself.
@@ -58,7 +54,7 @@ export function PrivacyPanel({
             and it never drops a clip on its own.
           </p>
           <ul className="space-y-1">
-            {HEURISTICS.map(({ label, detail }) => (
+            {privacy.heuristics.map(({ label, detail }) => (
               <li key={label} className="text-spool-paper/70">
                 <span className="text-spool-paper">{label}</span> — {detail}
               </li>
@@ -72,7 +68,8 @@ export function PrivacyPanel({
 
         <Section title="If you do not answer">
           <p className="text-spool-paper/70">
-            A prompt left unanswered for {CONSENT_TIMEOUT_SECONDS} seconds is treated as Skip. When
+            A prompt left unanswered for {privacy.consentTimeoutSeconds} seconds is treated as Skip.
+            When
             nobody is at the keyboard, the safe default is not to write.
           </p>
         </Section>

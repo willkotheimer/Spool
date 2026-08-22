@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CLIP_BYTE_CAP, DEFAULT_SPOOL_CLIP_CAP } from '../core/limits'
 import { createSpool } from '../core/spool'
 import { emptyLedger } from '../detect/notices'
-import { captureSnapshot, type CaptureState } from './capture'
+import { captureSnapshot, initialCaptureState, type CaptureState } from './capture'
 
 const deps = (() => {
   let n = 0
@@ -12,14 +12,15 @@ const deps = (() => {
   }
 })()
 
-const fresh = (): CaptureState => ({
-  spool: createSpool({ id: 'default', name: 'Default', kind: 'default', mode: 'fifo' }),
-  lastCapturedText: null,
-  ledger: emptyLedger,
-  pendingSelfWrite: null
-})
+const encode = (value: string): Uint8Array => new TextEncoder().encode(value)
 
-const text = (value: string) => ({ formats: ['CF_UNICODETEXT'], text: value })
+const fresh = (): CaptureState =>
+  initialCaptureState(
+    createSpool({ id: 'default', name: 'Default', kind: 'default', mode: 'fifo' }),
+    emptyLedger
+  )
+
+const text = (value: string) => ({ formats: ['CF_UNICODETEXT'], bytes: encode(value) })
 
 /** Copy a series of things, in order, the way a user would. */
 function captureAll(values: string[], from: CaptureState = fresh()): CaptureState {
@@ -43,7 +44,7 @@ describe('capturing text', () => {
   it('keeps the source application where the OS exposed one', () => {
     const outcome = captureSnapshot(
       fresh(),
-      { formats: ['CF_UNICODETEXT'], text: 'copied', sourceApp: 'Excel' },
+      { formats: ['CF_UNICODETEXT'], bytes: encode('copied'), sourceApp: 'Excel' },
       deps
     )
 
@@ -88,7 +89,7 @@ describe('the rolling cap (PLAN.md 3, Limits)', () => {
 
 describe('declining a copy', () => {
   it('declines a screenshot and says so once, however many follow', () => {
-    const image = { formats: ['CF_BITMAP', 'CF_DIB'], text: null }
+    const image = { formats: ['CF_BITMAP', 'CF_DIB'], bytes: null }
 
     let state = fresh()
     const first = captureSnapshot(state, image, deps)
@@ -106,7 +107,7 @@ describe('declining a copy', () => {
   })
 
   it('declines a file copy with its own wording', () => {
-    const outcome = captureSnapshot(fresh(), { formats: ['CF_HDROP', 'FileNameW'], text: null }, deps)
+    const outcome = captureSnapshot(fresh(), { formats: ['CF_HDROP', 'FileNameW'], bytes: null }, deps)
 
     expect(outcome.notice?.message).toBe("Files aren't captured in this version")
     expect(outcome.captured).toBeNull()
@@ -129,7 +130,7 @@ describe('declining a copy', () => {
 
   it('leaves the spool, the cursor, and the last-captured text untouched', () => {
     const before = captureAll(['one', 'two'])
-    const after = captureSnapshot(before, { formats: ['CF_DIB'], text: null }, deps)
+    const after = captureSnapshot(before, { formats: ['CF_DIB'], bytes: null }, deps)
 
     expect(after.state.spool.clips).toEqual(before.spool.clips)
     expect(after.state.spool.cursorClipId).toBe(before.spool.cursorClipId)
@@ -140,7 +141,7 @@ describe('declining a copy', () => {
   })
 
   it('says nothing at all about an empty clipboard', () => {
-    const outcome = captureSnapshot(fresh(), { formats: [], text: null }, deps)
+    const outcome = captureSnapshot(fresh(), { formats: [], bytes: null }, deps)
 
     expect(outcome.notice).toBeNull()
     expect(outcome.skipped).toBe('declined')
@@ -184,7 +185,7 @@ describe('self-capture suppression (PLAN.md 11, M4)', () => {
 
   it('consumes the pending write even when the next change is declined', () => {
     const served = { ...captureAll(['one']), pendingSelfWrite: 'one' }
-    const declined = captureSnapshot(served, { formats: ['CF_DIB'], text: null }, deps)
+    const declined = captureSnapshot(served, { formats: ['CF_DIB'], bytes: null }, deps)
 
     expect(declined.state.pendingSelfWrite).toBeNull()
   })

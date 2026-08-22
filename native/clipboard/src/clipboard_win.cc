@@ -27,6 +27,11 @@ struct ClipboardEvent {
   std::vector<uint8_t> text;  // UTF-8 bytes of the plain-text flavour, empty when there is none.
   bool has_text = false;
   std::string source_app;
+  // The value of CanIncludeInClipboardHistory, when the clipboard carried it. Zero means the
+  // source application asked to be kept out of clipboard history — which is what this app is, so
+  // PLAN.md 4 treats it as a Tier 1 declaration. The *value* matters: applications also set it to
+  // one to say the opposite, so the format's presence alone would be the wrong signal.
+  int32_t can_include_in_history = -1;
 };
 
 std::string ToUtf8(const std::wstring& wide) {
@@ -122,6 +127,19 @@ bool ReadClipboard(ClipboardEvent* event) {
       wchar_t name[256] = {0};
       int length = GetClipboardFormatNameW(format, name, 256);
       if (length > 0) event->formats.emplace_back(ToUtf8(std::wstring(name, length)));
+    }
+
+    // Read the concealment declaration while the clipboard is open (PLAN.md 4, Tier 1).
+    UINT history_format = RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
+    if (history_format != 0) {
+      HANDLE history = GetClipboardData(history_format);
+      if (history != nullptr) {
+        auto* value = static_cast<DWORD*>(GlobalLock(history));
+        if (value != nullptr) {
+          event->can_include_in_history = static_cast<int32_t>(*value);
+          GlobalUnlock(history);
+        }
+      }
     }
 
     HANDLE handle = GetClipboardData(CF_UNICODETEXT);
@@ -243,6 +261,12 @@ class Listener {
       snapshot.Set("sourceApp", owned->source_app.empty()
                                     ? env.Null()
                                     : Napi::String::New(env, owned->source_app).As<Napi::Value>());
+      // Null when the clipboard did not carry the format at all, which is the common case and is
+      // not a declaration either way (PLAN.md 4, Tier 1).
+      snapshot.Set("canIncludeInClipboardHistory",
+                   owned->can_include_in_history < 0
+                       ? env.Null()
+                       : Napi::Number::New(env, owned->can_include_in_history).As<Napi::Value>());
 
       callback.Call({snapshot});
     });

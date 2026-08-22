@@ -25,7 +25,7 @@ function fakeWatcher(): ClipboardWatcher & { change: (snapshot: ClipboardSnapsho
 
 const text = (value: string, sourceApp: string | null = null): ClipboardSnapshot => ({
   formats: ['CF_UNICODETEXT'],
-  text: value,
+  bytes: new TextEncoder().encode(value),
   sourceApp
 })
 
@@ -90,11 +90,11 @@ describe('a session that is capturing', () => {
   it('shows a notice for a declined copy and clears it on the next real capture', () => {
     const { session, watcher } = started()
 
-    watcher.change({ formats: ['CF_DIB', 'CF_BITMAP'], text: null })
+    watcher.change({ formats: ['CF_DIB', 'CF_BITMAP'], bytes: null })
     expect(session.getState().notice?.message).toBe("Images aren't captured in this version")
 
     // A second screenshot says nothing new, and the first notice still stands.
-    watcher.change({ formats: ['CF_DIB'], text: null })
+    watcher.change({ formats: ['CF_DIB'], bytes: null })
     expect(session.getState().notice?.message).toBe("Images aren't captured in this version")
 
     watcher.change(text('something real'))
@@ -255,5 +255,185 @@ describe('toggling mode (PLAN.md 3)', () => {
     session.toggleMode()
     session.toggleMode()
     expect(session.getState().spool.mode).toBe('fifo')
+  })
+})
+
+describe('consent (PLAN.md 4)', () => {
+  const secret = (value: string, sourceApp: string | null = '1Password.exe'): ClipboardSnapshot => ({
+    formats: ['CF_UNICODETEXT', 'ExcludeClipboardContentFromMonitorProcessing'],
+    bytes: new TextEncoder().encode(value),
+    sourceApp
+  })
+
+  const heuristic = (value: string): ClipboardSnapshot => ({
+    formats: ['CF_UNICODETEXT'],
+    bytes: new TextEncoder().encode(value),
+    sourceApp: 'Code.exe'
+  })
+
+  it('raises a Tier 1 prompt naming the application, and files nothing yet', () => {
+    const { session, watcher } = started()
+    watcher.change(secret('hunter2'))
+
+    const { prompt, spool } = session.getState()
+    expect(prompt?.tier).toBe(1)
+    expect(prompt?.headline).toBe('1Password marked this as concealed. Keep it in this spool?')
+    expect(spool.count).toBe(0)
+  })
+
+  it('raises a softer Tier 2 prompt for something that merely looks like a secret', () => {
+    const { session, watcher } = started()
+    watcher.change(heuristic('AKIAIOSFODNN7EXAMPLE'))
+
+    const { prompt } = session.getState()
+    expect(prompt?.tier).toBe(2)
+    expect(prompt?.headline).toBe('This looks like a secret. Keep it in this spool?')
+    expect(prompt?.detail).toMatch(/AWS/)
+  })
+
+  it('never shows the content of the clip it is asking about', () => {
+    const { session, watcher } = started()
+    watcher.change(secret('correct-horse-battery-staple'))
+
+    expect(JSON.stringify(session.getState())).not.toContain('correct-horse-battery-staple')
+  })
+
+  it('Keep places it in the spool, marked as having been flagged', () => {
+    const { session, watcher } = started()
+    watcher.change(secret('hunter2'))
+    session.answerConsent('keep_once')
+
+    const { spool, prompt } = session.getState()
+    expect(prompt).toBeNull()
+    expect(spool.count).toBe(1)
+    expect(spool.clips[0].preview).toBe('hunter2')
+  })
+
+  it('Skip removes the clip and it never appears in the list', () => {
+    const { session, watcher } = started()
+    watcher.change(secret('hunter2'))
+    session.answerConsent('skip')
+
+    const { spool, prompt } = session.getState()
+    expect(prompt).toBeNull()
+    expect(spool.count).toBe(0)
+    expect(JSON.stringify(spool)).not.toContain('hunter2')
+  })
+
+  it('wipes the buffer on Skip, so the bytes that held the secret are zeroed', () => {
+    const { session, watcher } = started()
+    const snapshot = secret('hunter2')
+    watcher.change(snapshot)
+
+    session.answerConsent('skip')
+
+    expect(snapshot.bytes?.every((byte) => byte === 0)).toBe(true)
+  })
+
+  it('wipes the buffer on Keep too, once the clip is safely in the spool', () => {
+    const { session, watcher } = started()
+    const snapshot = secret('hunter2')
+    watcher.change(snapshot)
+
+    session.answerConsent('keep_once')
+
+    expect(session.getState().spool.clips[0].preview).toBe('hunter2')
+    expect(snapshot.bytes?.every((byte) => byte === 0)).toBe(true)
+  })
+
+  it('remembers "always keep" for that application and stops asking', () => {
+    const { session, watcher } = started()
+    watcher.change(secret('first'))
+    session.answerConsent('always_keep')
+
+    watcher.change(secret('second'))
+
+    expect(session.getState().prompt).toBeNull()
+    expect(session.getState().spool.clips.map((clip) => clip.preview)).toEqual(['first', 'second'])
+  })
+
+  it('remembers "always skip" for that application and files nothing from it', () => {
+    const { session, watcher } = started()
+    watcher.change(secret('first'))
+    session.answerConsent('always_skip')
+
+    watcher.change(secret('second'))
+
+    expect(session.getState().prompt).toBeNull()
+    expect(session.getState().spool.count).toBe(0)
+  })
+
+  it('keeps rules per application, not globally', () => {
+    const { session, watcher } = started()
+    watcher.change(secret('from the manager'))
+    session.answerConsent('always_skip')
+
+    watcher.change(heuristic('AKIAIOSFODNN7EXAMPLE'))
+
+    // A different application still gets asked about.
+    expect(session.getState().prompt?.tier).toBe(2)
+  })
+
+  it('an ordinary copy is never asked about', () => {
+    const { session, watcher } = started()
+    watcher.change(text('just some notes for later'))
+
+    expect(session.getState().prompt).toBeNull()
+    expect(session.getState().spool.count).toBe(1)
+  })
+})
+
+describe('the consent timeout (PLAN.md 4)', () => {
+  const secret = (value: string): ClipboardSnapshot => ({
+    formats: ['CF_UNICODETEXT', 'ExcludeClipboardContentFromMonitorProcessing'],
+    bytes: new TextEncoder().encode(value),
+    sourceApp: '1Password.exe'
+  })
+
+  it('behaves as Skip after thirty seconds, because nobody is at the keyboard', () => {
+    vi.useFakeTimers()
+    try {
+      const { session, watcher } = started()
+      const snapshot = secret('hunter2')
+      watcher.change(snapshot)
+
+      expect(session.getState().prompt).not.toBeNull()
+
+      vi.advanceTimersByTime(29_000)
+      expect(session.getState().prompt).not.toBeNull()
+
+      vi.advanceTimersByTime(1_500)
+      expect(session.getState().prompt).toBeNull()
+      expect(session.getState().spool.count).toBe(0)
+      expect(snapshot.bytes?.every((byte) => byte === 0)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not fire after the user has answered', () => {
+    vi.useFakeTimers()
+    try {
+      const { session, watcher } = started()
+      watcher.change(secret('hunter2'))
+      session.answerConsent('keep_once')
+
+      vi.advanceTimersByTime(60_000)
+
+      expect(session.getState().spool.count).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a newer copy supersedes an unanswered prompt, wiping the older one', () => {
+    const { session, watcher } = started()
+    const first = secret('older secret')
+    watcher.change(first)
+    watcher.change(secret('newer secret'))
+
+    expect(first.bytes?.every((byte) => byte === 0)).toBe(true)
+    expect(session.getState().prompt).not.toBeNull()
+    expect(session.getState().spool.count).toBe(0)
   })
 })
