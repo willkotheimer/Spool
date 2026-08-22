@@ -60,6 +60,17 @@ export interface PrivacyFacts {
   readonly dataFilePath: string | null
 }
 
+/** Whether anything is being stored, and what to do when it is not (PLAN.md 11, M6). */
+export interface StorageStatus {
+  readonly available: boolean
+  /** Plain-language explanation when storage is unavailable. */
+  readonly reason: string | null
+  /** Whether the only way forward is a fresh store, which the user has to choose. */
+  readonly canStartFresh: boolean
+  /** Where the encrypted file lives, once there is one. */
+  readonly path: string | null
+}
+
 export interface AppState {
   readonly spool: SpoolView
   /** The most recent decline, shown until the next capture replaces it. */
@@ -70,11 +81,13 @@ export interface AppState {
   readonly prompt: PendingPrompt | null
   /** For the privacy panel, so its claims come from the code rather than from prose (PLAN.md 5f). */
   readonly privacy: PrivacyFacts
+  readonly storage: StorageStatus
 }
 
 /** The channel names, in one place so the two sides cannot drift apart. */
 export const CHANNELS = {
   getState: 'spool:get-state',
   state: 'spool:state',
-  answerConsent: 'spool:answer-consent'
+  answerConsent: 'spool:answer-consent',
+  startFreshStore: 'spool:start-fresh-store'
 } as const

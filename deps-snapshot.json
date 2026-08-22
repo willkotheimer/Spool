@@ -1,14 +1,24 @@
 {
   "dependencies": {
-    "spool-clipboard": {
-      "version": "0.1.0",
-      "resolved": "file:../native/clipboard",
+    "better-sqlite3-multiple-ciphers": {
+      "version": "13.0.3",
+      "resolved": "https://registry.npmjs.org/better-sqlite3-multiple-ciphers/-/better-sqlite3-multiple-ciphers-13.0.3.tgz",
       "overridden": false,
       "dependencies": {
         "node-addon-api": {
           "version": "8.9.2",
           "resolved": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-8.9.2.tgz",
           "overridden": false
+        }
+      }
+    },
+    "spool-clipboard": {
+      "version": "0.1.0",
+      "resolved": "file:../native/clipboard",
+      "overridden": false,
+      "dependencies": {
+        "node-addon-api": {
+          "version": "8.9.2"
         }
       }
     }

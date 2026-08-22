@@ -12,7 +12,7 @@ import { PrivacyPanel } from './PrivacyPanel'
 export function App(): JSX.Element {
   const [showPrivacy, setShowPrivacy] = useState(false)
   const { summonHotkey, serveHotkey, modeHotkey, platform } = window.spool
-  const { spool, notice, capture, prompt, privacy } = useAppState()
+  const { spool, notice, capture, prompt, privacy, storage } = useAppState()
 
   if (showPrivacy) {
     return (
@@ -42,6 +42,21 @@ export function App(): JSX.Element {
         <p className="mx-2 mb-1 rounded bg-spool-paper/5 px-2 py-1.5 text-[11px] text-spool-paper/60">
           {notice.message}
         </p>
+      )}
+
+      {!storage.available && storage.reason !== null && (
+        <div className="mx-2 mb-1 rounded bg-spool-thread/10 px-2 py-1.5 text-[11px] text-spool-thread">
+          <p>Not saving anything — {storage.reason}</p>
+          {storage.canStartFresh && (
+            <button
+              type="button"
+              onClick={() => void window.spool.startFreshStore()}
+              className="mt-1 rounded border border-spool-thread/50 px-2 py-0.5 text-[11px] hover:bg-spool-thread/20"
+            >
+              Start a fresh store
+            </button>
+          )}
+        </div>
       )}
 
       {!capture.available && capture.reason !== null && (

@@ -10,6 +10,7 @@ declare global {
     readonly modeHotkey: string
     getState(): Promise<AppState>
     answerConsent(choice: ConsentChoice): Promise<void>
+    startFreshStore(): Promise<void>
     onState(listener: (state: AppState) => void): () => void
   }
 

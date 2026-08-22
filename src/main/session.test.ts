@@ -3,6 +3,9 @@ import type { ClipboardSnapshot } from './detect/admit'
 import { Session } from './session'
 import type { AppState } from '../shared/ipc'
 import type { ClipboardWatcher } from './clipboard/watcher'
+import { createClip } from './core/clip'
+import type { Spool } from './core/types'
+import type { SourceAction, SourceRules } from './detect/consent'
 
 /**
  * The session end to end, driven by a fake watcher: clipboard changes in, the state the renderer
@@ -435,5 +438,129 @@ describe('the consent timeout (PLAN.md 4)', () => {
     expect(first.bytes?.every((byte) => byte === 0)).toBe(true)
     expect(session.getState().prompt).not.toBeNull()
     expect(session.getState().spool.count).toBe(0)
+  })
+})
+
+describe('persistence (PLAN.md 11, M6)', () => {
+  /** An in-memory stand-in for the encrypted store, recording what was written. */
+  function fakeStore(initial: { spools?: Spool[]; rules?: Map<string, SourceAction> } = {}) {
+    const saved: { spools: Spool[]; rules: Map<string, SourceAction>[] } = { spools: [], rules: [] }
+    return {
+      saved,
+      store: {
+        path: 'C:/Users/someone/AppData/Roaming/Spool/spool.db',
+        saveSpool: (spool: Spool) => saved.spools.push(spool),
+        saveSourceRules: (rules: SourceRules) => saved.rules.push(new Map(rules)),
+        loadSpools: () => initial.spools ?? [],
+        loadSourceRules: () => initial.rules ?? new Map<string, SourceAction>(),
+        close: () => {}
+      }
+    }
+  }
+
+  it('writes the spool through on capture, and again when the cursor moves', () => {
+    const { session, watcher } = started()
+    const { store, saved } = fakeStore()
+    session.attachStore(store)
+
+    watcher.change(text('one'))
+    watcher.change(text('two'))
+    session.serveNext()
+
+    expect(saved.spools.length).toBeGreaterThanOrEqual(3)
+    expect(saved.spools.at(-1)?.clips.map((clip) => clip.content)).toEqual(['one', 'two'])
+    // The cursor advanced on serve, and that is what has to survive a restart.
+    expect(saved.spools.at(-1)?.cursorClipId).toBe(saved.spools.at(-1)?.clips[1].id)
+  })
+
+  it('does not write when nothing about the spool changed', () => {
+    const { session, watcher } = started()
+    const { store, saved } = fakeStore()
+    session.attachStore(store)
+
+    watcher.change(text('one'))
+    const afterCapture = saved.spools.length
+
+    // A decline changes a notice, not the spool.
+    watcher.change({ formats: ['CF_DIB'], bytes: null })
+
+    expect(saved.spools.length).toBe(afterCapture)
+  })
+
+  it('restores clips, cursor, and mode from the store', () => {
+    const restored: Spool = {
+      id: 'default',
+      name: 'Default spool',
+      kind: 'default',
+      mode: 'lifo',
+      clips: [
+        createClip({ id: 'a', content: 'first', capturedAt: '2026-08-22T17:00:00.000Z' }),
+        createClip({ id: 'b', content: 'second', capturedAt: '2026-08-22T17:00:01.000Z' })
+      ],
+      cursorClipId: 'b'
+    }
+
+    const { session } = started()
+    session.attachStore(fakeStore({ spools: [restored] }).store)
+
+    const state = session.getState()
+    expect(state.spool.clips.map((clip) => clip.preview)).toEqual(['first', 'second'])
+    expect(state.spool.cursorClipId).toBe('b')
+    expect(state.spool.mode).toBe('lifo')
+    expect(state.storage.available).toBe(true)
+    expect(state.storage.path).toMatch(/spool\.db$/)
+  })
+
+  it('restores source rules, so a standing answer survives a restart', () => {
+    const { session, watcher } = started()
+    session.attachStore(
+      fakeStore({ rules: new Map<string, SourceAction>([['1Password.exe', 'always_skip']]) }).store
+    )
+
+    watcher.change({
+      formats: ['CF_UNICODETEXT', 'ExcludeClipboardContentFromMonitorProcessing'],
+      bytes: new TextEncoder().encode('a secret'),
+      sourceApp: '1Password.exe'
+    })
+
+    expect(session.getState().prompt).toBeNull()
+    expect(session.getState().spool.count).toBe(0)
+  })
+
+  it('writes a new source rule through as soon as it is made', () => {
+    const { session, watcher } = started()
+    const { store, saved } = fakeStore()
+    session.attachStore(store)
+
+    watcher.change({
+      formats: ['CF_UNICODETEXT', 'ExcludeClipboardContentFromMonitorProcessing'],
+      bytes: new TextEncoder().encode('a secret'),
+      sourceApp: '1Password.exe'
+    })
+    session.answerConsent('always_skip')
+
+    expect(saved.rules.at(-1)?.get('1Password.exe')).toBe('always_skip')
+  })
+
+  it('says why nothing is being stored, and whether there is a way out', () => {
+    const { session } = started()
+    session.reportStorageFailure({
+      reason: 'the sealed key could not be opened',
+      canStartFresh: true
+    })
+
+    const { storage } = session.getState()
+    expect(storage.available).toBe(false)
+    expect(storage.reason).toBe('the sealed key could not be opened')
+    expect(storage.canStartFresh).toBe(true)
+  })
+
+  it('keeps working with no store at all', () => {
+    const { session, watcher } = started()
+
+    watcher.change(text('captured with nowhere to put it'))
+
+    expect(session.getState().spool.count).toBe(1)
+    expect(session.getState().storage.available).toBe(false)
   })
 })

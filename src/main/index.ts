@@ -3,10 +3,11 @@ import { blockSessionRequests, installNetworkGuard } from './guard'
 
 installNetworkGuard()
 
-import { app, BrowserWindow, session } from 'electron'
+import { app, BrowserWindow, safeStorage, session } from 'electron'
 import { registerHotkeys, unregisterHotkeys } from './hotkeys'
 import { registerIpc } from './ipc'
 import { Session } from './session'
+import { explainStorageFailure, openStore, startFresh, storePaths } from './store'
 import { writeClipboardText } from './clipboard/writer'
 import { createTray } from './tray'
 import {
@@ -33,7 +34,20 @@ if (!app.requestSingleInstanceLock()) {
     )
 
     const spoolSession = new Session(writeClipboardText)
-    registerIpc(spoolSession, getCompactWindow)
+
+    /**
+     * Open the encrypted store and restore what it holds (PLAN.md 11, M6). A failure is reported
+     * to the window rather than thrown: an app that cannot store is still an app that can capture
+     * and serve, and the user is owed an explanation and whatever way out exists.
+     */
+    const paths = storePaths(app.getPath('userData'))
+    const attach = (result: ReturnType<typeof openStore>): void => {
+      if (result.ok) spoolSession.attachStore(result.store)
+      else spoolSession.reportStorageFailure(explainStorageFailure(result))
+    }
+    attach(openStore(paths, safeStorage))
+
+    registerIpc(spoolSession, getCompactWindow, () => attach(startFresh(paths, safeStorage)))
 
     createCompactWindow()
     createTray()

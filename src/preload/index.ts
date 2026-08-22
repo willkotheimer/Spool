@@ -21,6 +21,9 @@ const api = {
   answerConsent: (choice: ConsentChoice): Promise<void> =>
     ipcRenderer.invoke(CHANNELS.answerConsent, choice),
 
+  /** Throw away a store that cannot be opened and begin again (PLAN.md 11, M6). */
+  startFreshStore: (): Promise<void> => ipcRenderer.invoke(CHANNELS.startFreshStore),
+
   /** Every subsequent state. Returns its own unsubscribe, so React can clean up. */
   onState: (listener: (state: AppState) => void): (() => void) => {
     const handler = (_event: unknown, state: AppState): void => listener(state)

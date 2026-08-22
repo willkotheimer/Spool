@@ -38,12 +38,13 @@ above. Updates are manual downloads.
 
 The clipboard listener is a native addon, so a first install compiles it. On Windows that needs
 Visual Studio Build Tools with the C++ workload and a Windows SDK; `npm install` runs `node-gyp`
-for you once they are there.
+for you once they are there. Keep the checkout path short — building native modules from a deeply
+nested directory fails on Windows' 260-character path limit.
 
 ## Status
 
-M5 — sensitive clips: anything an application marks as concealed, or that looks like a key, token,
-PEM block, or connection string, is held in memory and asked about before it is filed. Skip wipes the
-bytes; unanswered for thirty seconds counts as Skip. Underneath are M4's serve, M3's capture, M2's
-spool core, M1's zero-network gate, and M0's tray icon and summon hotkey. Nothing is stored yet, so
-restarting loses everything — persistence arrives at M6.
+M6 — persistence: clips, cursor, mode, and standing answers survive a restart, in a SQLCipher
+database whose key is generated on first run and sealed by Windows itself. Nothing is written in
+plaintext, and a key that cannot be opened is explained rather than swallowed. Underneath are M5's
+consent prompts, M4's serve, M3's capture, M2's spool core, M1's zero-network gate, and M0's tray
+icon and summon hotkey.

@@ -472,8 +472,19 @@ version bump. Budget for it: this is the cost Electron charges in place of the o
 **Measured at M3: the clipboard addon does not pay it.** Written against N-API — which is ABI-stable
 across both Node and Electron versions rather than tied to V8's — the module compiled by `node-gyp`
 for Node 22 loaded unchanged in Electron 43. So no `electron-rebuild` step ships for it, and adding
-one would be a build step that does nothing. The tax is still owed by any module that uses V8
-headers directly, so M6 checks this again for SQLite rather than assuming.
+one would be a build step that does nothing.
+
+**Measured again at M6: neither does SQLite.** `better-sqlite3-multiple-ciphers` is N-API too and
+ships prebuilt binaries for every platform this app targets, including `win32-x64`. A clean
+`npm ci` compiles only Spool's own addon; SQLite loads its prebuild, in Node and in Electron alike,
+with no rebuild step. **The tax the plan budgeted for turns out not to be owed by either module** —
+so `electron-rebuild` is deliberately not wired into the build. It becomes necessary only if a
+future dependency uses V8 headers directly, and that is the moment to add it.
+
+One real constraint did surface, and it is worth knowing before it wastes an afternoon: building
+these modules from source fails on a deeply nested checkout, because MSBuild's intermediate paths
+exceed Windows' 260-character limit. It is a property of *where* the repository sits, not of the
+repository. Keep the checkout path short.
 
 ---
 

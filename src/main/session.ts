@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import type { AppState, ConsentChoice, Notice, PendingPrompt } from '../shared/ipc'
+import type {
+  AppState,
+  ConsentChoice,
+  Notice,
+  PendingPrompt,
+  StorageStatus
+} from '../shared/ipc'
 import {
   captureSnapshot,
   initialCaptureState,
@@ -22,6 +28,7 @@ import {
 import { emptyLedger, NOTHING_TO_PASTE } from './detect/notices'
 import { HEURISTIC_RULES } from './detect/sensitivity'
 import { toSpoolView } from './ipc/view'
+import type { Store } from './store'
 
 /**
  * The live session: one default spool, held in memory (PLAN.md 11, M3 — restarting loses
@@ -46,11 +53,56 @@ export class Session {
   private pending: PendingConsent | null = null
   private pendingTimer: ReturnType<typeof setTimeout> | null = null
 
+  /** Where state is written through to. Null means this session keeps nothing (PLAN.md 11, M6). */
+  private store: Store | null = null
+  private storage: StorageStatus = {
+    available: false,
+    reason: 'storage has not started yet',
+    canStartFresh: false,
+    path: null
+  }
+  /** What was last written, so a publish that changed nothing does not write anything. */
+  private savedSpool: CaptureState['spool'] | null = null
+  private savedRules: CaptureState['sourceRules'] | null = null
+
   /**
    * `writeText` is injected rather than imported so that this class never reaches for Electron —
    * which is also what lets every rule below be tested without launching the app.
    */
   constructor(private readonly writeText: (text: string) => void) {}
+
+  /**
+   * Attach a store and restore what it holds (PLAN.md 11, M6). Everything the user had — clips,
+   * cursor, mode, and standing answers — comes back as it was.
+   */
+  attachStore(store: Store): void {
+    this.store = store
+    this.storage = { available: true, reason: null, canStartFresh: false, path: store.path }
+
+    const [restored] = store.loadSpools()
+    const rules = store.loadSourceRules()
+
+    this.state = {
+      ...this.state,
+      spool: restored ?? this.state.spool,
+      sourceRules: rules
+    }
+    this.savedSpool = this.state.spool
+    this.savedRules = this.state.sourceRules
+
+    this.publish()
+  }
+
+  /** Say why nothing is being stored, so the window can offer whatever way out there is. */
+  reportStorageFailure(status: Omit<StorageStatus, 'available' | 'path'>): void {
+    this.storage = { available: false, path: null, ...status }
+    this.publish()
+  }
+
+  detachStore(): void {
+    this.store?.close()
+    this.store = null
+  }
 
   /** Start watching the clipboard. A watcher that will not load is reported, never swallowed. */
   startCapture(load: WatcherLoad = loadClipboardWatcher()): void {
@@ -157,13 +209,12 @@ export class Session {
       spool: toSpoolView(this.state.spool),
       notice: this.notice,
       capture: this.capture,
+      storage: this.storage,
       prompt: this.promptView(),
       privacy: {
         heuristics: HEURISTIC_RULES,
         consentTimeoutSeconds: Math.round(CONSENT_TIMEOUT_MS / 1000),
-        // The encrypted store arrives at M6; until then the panel says so rather than naming a
-        // file that is not there (PLAN.md 11, M1).
-        dataFilePath: null
+        dataFilePath: this.storage.path
       }
     }
   }
@@ -231,7 +282,25 @@ export class Session {
   }
 
   private publish(): void {
+    this.persist()
     const state = this.getState()
     for (const listener of this.listeners) listener(state)
+  }
+
+  /**
+   * Write through what changed. The state is immutable, so an identity check is enough to tell a
+   * real mutation from a publish that only moved a notice around.
+   */
+  private persist(): void {
+    if (this.store === null) return
+
+    if (this.state.spool !== this.savedSpool) {
+      this.store.saveSpool(this.state.spool)
+      this.savedSpool = this.state.spool
+    }
+    if (this.state.sourceRules !== this.savedRules) {
+      this.store.saveSourceRules(this.state.sourceRules)
+      this.savedRules = this.state.sourceRules
+    }
   }
 }
