@@ -42,7 +42,8 @@ for you once they are there.
 
 ## Status
 
-M3 — capture: copying text in any application files it into the default spool, which rolls at fifty
-clips. Images, files, and anything over 1 MiB are declined with a notice that says which, once per
-session. Underneath are M2's spool core, M1's zero-network gate and privacy panel, and M0's tray icon
-and summon hotkey. Nothing is stored yet, so restarting loses everything — persistence arrives at M6.
+M4 — serve: `Win+Alt+N` puts the next clip on the clipboard and advances; you paste it yourself with
+Ctrl+V, as many times as you like. `Win+Alt+M` switches between oldest-first and newest-first.
+Underneath are M3's capture, M2's spool core, M1's zero-network gate and privacy panel, and M0's tray
+icon and summon hotkey. Nothing is stored yet, so restarting loses everything — persistence arrives
+at M6.

@@ -1,9 +1,16 @@
 import { join } from 'node:path'
 import { app, Menu, Tray, nativeImage, type MenuItemConstructorOptions } from 'electron'
-import { describeAction, type Platform } from './accelerators'
+import { ACTION_LABELS, type Action } from './accelerators'
 import { allowQuit, showCompactWindow, toggleCompactWindow } from './window'
 
 let tray: Tray | null = null
+
+/** What happened when one action's bindings were claimed. */
+export interface HotkeyStatus {
+  readonly action: Action
+  readonly claimed: readonly string[]
+  readonly refused: readonly string[]
+}
 
 function trayIconPath(): string {
   // Packaged builds carry resources/ alongside the app; in development it sits at the repo root.
@@ -12,9 +19,30 @@ function trayIconPath(): string {
     : join(__dirname, '../../resources/tray.png')
 }
 
-function buildMenu(notices: string[]): Menu {
-  const items: MenuItemConstructorOptions[] = [
-    ...notices.map((label): MenuItemConstructorOptions => ({ label, enabled: false })),
+/**
+ * The tray menu doubles as the hotkey reference, which is why it lists every binding rather than
+ * only the broken ones: a failed registration must be surfaced, not swallowed, and the honest way
+ * to show one key is refused is to show what all of them are (PLAN.md 8).
+ */
+function buildMenu(statuses: readonly HotkeyStatus[]): Menu {
+  const lines: MenuItemConstructorOptions[] = statuses.map((status) => ({
+    label:
+      status.claimed.length > 0
+        ? `${ACTION_LABELS[status.action]}: ${status.claimed.join(' or ')}`
+        : `${ACTION_LABELS[status.action]}: ${status.refused.join(' and ')} refused by another app`,
+    enabled: false
+  }))
+
+  const partiallyRefused = statuses
+    .filter((status) => status.claimed.length > 0 && status.refused.length > 0)
+    .flatMap((status) => status.refused)
+
+  if (partiallyRefused.length > 0) {
+    lines.push({ label: `${partiallyRefused.join(' and ')} was refused by another app`, enabled: false })
+  }
+
+  return Menu.buildFromTemplate([
+    ...lines,
     { type: 'separator' },
     { label: 'Show Spool', click: () => showCompactWindow() },
     { type: 'separator' },
@@ -25,12 +53,7 @@ function buildMenu(notices: string[]): Menu {
         app.quit()
       }
     }
-  ]
-  return Menu.buildFromTemplate(items)
-}
-
-function summonLabel(): string {
-  return `Summon: ${describeAction('summon', process.platform as Platform)}`
+  ])
 }
 
 export function createTray(): Tray {
@@ -39,25 +62,19 @@ export function createTray(): Tray {
 
   tray = new Tray(icon)
   tray.setToolTip('Spool')
-  tray.setContextMenu(buildMenu([summonLabel()]))
+  tray.setContextMenu(buildMenu([]))
   tray.on('click', () => toggleCompactWindow())
   return tray
 }
 
 /**
- * Tell the user which hotkeys could not be claimed. A failed registration must be surfaced, not
- * swallowed — a silently dead hotkey reads as a broken app (PLAN.md 8). The rebinding UI it should
- * open does not exist until settings do; naming the refused combinations is what M0 can honestly
- * do, and the tray menu is where a tray-resident app can say it.
+ * Show which hotkeys are live and which were refused. The rebinding UI this should open does not
+ * exist until settings do; naming the refused combinations is what can honestly be done now.
  */
-export function reportHotkeyFailure(refused: string[], someClaimed: boolean): void {
-  if (!tray || refused.length === 0) return
+export function reportHotkeyStatus(statuses: readonly HotkeyStatus[]): void {
+  if (!tray) return
 
-  const refusedList = refused.join(' and ')
-  const notices = someClaimed
-    ? [summonLabel(), `${refusedList} was refused by another app`]
-    : [`${refusedList} was refused — no summon hotkey is active`]
-
-  tray.setToolTip(someClaimed ? 'Spool' : 'Spool — the summon hotkey is unavailable')
-  tray.setContextMenu(buildMenu(notices))
+  const dead = statuses.filter((status) => status.claimed.length === 0)
+  tray.setToolTip(dead.length === 0 ? 'Spool' : `Spool — ${dead.length} hotkey(s) unavailable`)
+  tray.setContextMenu(buildMenu(statuses))
 }

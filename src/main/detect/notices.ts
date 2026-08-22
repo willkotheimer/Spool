@@ -30,6 +30,12 @@ export function formatBytes(bytes: number): string {
 
 const round = (value: number): string => (Math.round(value * 10) / 10).toString()
 
+/** Every user-facing string in this file, so the wording lives in one place. */
+export const NOTHING_TO_PASTE: Notice = {
+  category: 'nothing_to_paste',
+  message: 'Nothing to paste — this spool is empty'
+}
+
 function messageFor(category: NoticeCategory, bytes: number, limit: number): string {
   switch (category) {
     case 'image':
@@ -38,6 +44,8 @@ function messageFor(category: NoticeCategory, bytes: number, limit: number): str
       return "Files aren't captured in this version"
     case 'unsupported':
       return "That kind of copy isn't captured in this version"
+    case 'nothing_to_paste':
+      return NOTHING_TO_PASTE.message
     case 'size':
       // Deliberately shaped unlike the format notices: nothing about this copy was the wrong
       // kind of thing, it was only too big (PLAN.md 4).

@@ -1,16 +1,14 @@
 import { globalShortcut } from 'electron'
 import {
+  ACTIONS,
   defaultAccelerators,
   describeAccelerator,
   type Action,
   type Platform
 } from './accelerators'
-import { reportHotkeyFailure } from './tray'
-import { toggleCompactWindow } from './window'
+import { reportHotkeyStatus, type HotkeyStatus } from './tray'
 
-const HANDLERS: Record<Action, () => void> = {
-  summon: () => toggleCompactWindow()
-}
+export type HotkeyHandlers = Record<Action, () => void>
 
 function claim(accelerator: string, handler: () => void): boolean {
   try {
@@ -26,18 +24,25 @@ function claim(accelerator: string, handler: () => void): boolean {
  * action with several bindings works as long as one of them is claimed; the refused ones are still
  * named, so the user is never left guessing which key is live.
  */
-export function registerHotkeys(platform: Platform = process.platform as Platform): void {
-  for (const action of Object.keys(HANDLERS) as Action[]) {
+export function registerHotkeys(
+  handlers: HotkeyHandlers,
+  platform: Platform = process.platform as Platform
+): HotkeyStatus[] {
+  const statuses = ACTIONS.map((action): HotkeyStatus => {
+    const claimed: string[] = []
     const refused: string[] = []
-    let claimed = 0
 
     for (const accelerator of defaultAccelerators(action, platform)) {
-      if (claim(accelerator, HANDLERS[action])) claimed += 1
-      else refused.push(describeAccelerator(accelerator, platform))
+      const described = describeAccelerator(accelerator, platform)
+      if (claim(accelerator, handlers[action])) claimed.push(described)
+      else refused.push(described)
     }
 
-    if (refused.length > 0) reportHotkeyFailure(refused, claimed > 0)
-  }
+    return { action, claimed, refused }
+  })
+
+  reportHotkeyStatus(statuses)
+  return statuses
 }
 
 export function unregisterHotkeys(): void {

@@ -15,7 +15,8 @@ const deps = (() => {
 const fresh = (): CaptureState => ({
   spool: createSpool({ id: 'default', name: 'Default', kind: 'default', mode: 'fifo' }),
   lastCapturedText: null,
-  ledger: emptyLedger
+  ledger: emptyLedger,
+  pendingSelfWrite: null
 })
 
 const text = (value: string) => ({ formats: ['CF_UNICODETEXT'], text: value })
@@ -143,5 +144,48 @@ describe('declining a copy', () => {
 
     expect(outcome.notice).toBeNull()
     expect(outcome.skipped).toBe('declined')
+  })
+})
+
+describe('self-capture suppression (PLAN.md 11, M4)', () => {
+  it('ignores the clipboard change caused by serving', () => {
+    const after = captureAll(['one', 'two'])
+    const served = { ...after, pendingSelfWrite: 'one' }
+
+    // The clipboard change our own serve just caused, arriving back through the watcher.
+    const outcome = captureSnapshot(served, text('one'), deps)
+
+    expect(outcome.skipped).toBe('self_write')
+    expect(outcome.captured).toBeNull()
+    expect(outcome.state.spool.clips).toHaveLength(2)
+  })
+
+  it('recognises a served clip that is not the last thing captured', () => {
+    // Dedupe compares against the last capture, so serving an older clip would slip past it.
+    const after = captureAll(['one', 'two', 'three'])
+    const served = { ...after, pendingSelfWrite: 'one' }
+
+    expect(captureSnapshot(served, text('one'), deps).skipped).toBe('self_write')
+  })
+
+  it('captures the same text when the user really does copy it next', () => {
+    const after = captureAll(['one', 'two'])
+    const served = { ...after, pendingSelfWrite: 'one' }
+
+    // Something else arrives first, which consumes the pending write...
+    const between = captureSnapshot(served, text('elsewhere'), deps)
+    expect(between.state.pendingSelfWrite).toBeNull()
+
+    // ...so a real copy of the served text afterwards is a real copy.
+    const real = captureSnapshot(between.state, text('one'), deps)
+    expect(real.skipped).toBeNull()
+    expect(real.captured?.content).toBe('one')
+  })
+
+  it('consumes the pending write even when the next change is declined', () => {
+    const served = { ...captureAll(['one']), pendingSelfWrite: 'one' }
+    const declined = captureSnapshot(served, { formats: ['CF_DIB'], text: null }, deps)
+
+    expect(declined.state.pendingSelfWrite).toBeNull()
   })
 })
