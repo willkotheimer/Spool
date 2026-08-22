@@ -1,5 +1,5 @@
 import { ipcMain, type BrowserWindow } from 'electron'
-import { CHANNELS, type AppState } from '../../shared/ipc'
+import { CHANNELS, type AppState, type ConsentChoice } from '../../shared/ipc'
 import type { Session } from '../session'
 
 /**
@@ -11,6 +11,11 @@ import type { Session } from '../session'
 export function registerIpc(session: Session, windowFor: () => BrowserWindow | null): () => void {
   ipcMain.handle(CHANNELS.getState, (): AppState => session.getState())
 
+  // Parse, call, return — the decision is the session's (PLAN.md 6).
+  ipcMain.handle(CHANNELS.answerConsent, (_event, choice: ConsentChoice) => {
+    session.answerConsent(choice)
+  })
+
   const unsubscribe = session.onChange((state) => {
     const window = windowFor()
     if (window !== null && !window.isDestroyed()) {
@@ -20,6 +25,7 @@ export function registerIpc(session: Session, windowFor: () => BrowserWindow | n
 
   return () => {
     ipcMain.removeHandler(CHANNELS.getState)
+    ipcMain.removeHandler(CHANNELS.answerConsent)
     unsubscribe()
   }
 }

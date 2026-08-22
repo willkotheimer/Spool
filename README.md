@@ -42,8 +42,8 @@ for you once they are there.
 
 ## Status
 
-M4 — serve: `Win+Alt+N` puts the next clip on the clipboard and advances; you paste it yourself with
-Ctrl+V, as many times as you like. `Win+Alt+M` switches between oldest-first and newest-first.
-Underneath are M3's capture, M2's spool core, M1's zero-network gate and privacy panel, and M0's tray
-icon and summon hotkey. Nothing is stored yet, so restarting loses everything — persistence arrives
-at M6.
+M5 — sensitive clips: anything an application marks as concealed, or that looks like a key, token,
+PEM block, or connection string, is held in memory and asked about before it is filed. Skip wipes the
+bytes; unanswered for thirty seconds counts as Skip. Underneath are M4's serve, M3's capture, M2's
+spool core, M1's zero-network gate, and M0's tray icon and summon hotkey. Nothing is stored yet, so
+restarting loses everything — persistence arrives at M6.

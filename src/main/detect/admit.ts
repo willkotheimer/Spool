@@ -14,26 +14,33 @@ import { hasFileReference, hasImage, hasPlainText } from './formats'
  * something that will not be stored either way.
  */
 
-/** What the OS handed over when the clipboard changed. */
+/**
+ * What the OS handed over when the clipboard changed.
+ *
+ * Content arrives as **bytes**, not a string: a declined secret has to be wipeable, and a
+ * JavaScript string never is (PLAN.md 4).
+ */
 export interface ClipboardSnapshot {
   /** Format names the OS reported, in no particular order. */
   readonly formats: readonly string[]
-  /** The plain-text flavour, if the clipboard offered one. */
-  readonly text: string | null
+  /** The plain-text flavour as UTF-8 bytes, if the clipboard offered one. */
+  readonly bytes: Uint8Array | null
   /** The application that owns the copy, where the OS exposes it. */
   readonly sourceApp?: string | null
+  /** The Windows `CanIncludeInClipboardHistory` value, when the clipboard carried it (PLAN.md 4). */
+  readonly canIncludeInClipboardHistory?: number | null
 }
 
 /** Why a copy was not captured. `empty` is the one that produces no notice. */
 export type DeclineReason = 'file' | 'image' | 'unsupported' | 'empty'
 
 export type Admission =
-  | { readonly admit: true; readonly text: string }
+  | { readonly admit: true; readonly bytes: Uint8Array }
   | { readonly admit: false; readonly reason: DeclineReason }
 
 export function admit(snapshot: ClipboardSnapshot): Admission {
-  if (hasPlainText(snapshot.formats) && snapshot.text !== null && snapshot.text.length > 0) {
-    return { admit: true, text: snapshot.text }
+  if (hasPlainText(snapshot.formats) && snapshot.bytes !== null && snapshot.bytes.length > 0) {
+    return { admit: true, bytes: snapshot.bytes }
   }
 
   // A clipboard with no text flavour at all is a non-text copy. Name it as precisely as the
@@ -50,7 +57,8 @@ export function admit(snapshot: ClipboardSnapshot): Admission {
  * Duplicate suppression: an identical consecutive clip is ignored (PLAN.md 11, M3).
  *
  * Consecutive, not global — copying the same value again an hour and forty clips later is a
- * deliberate act, and the spool is a thing the user arranges rather than a set.
+ * deliberate act, and the spool is a thing the user arranges rather than a set. Applied in
+ * `clipboard/capture.ts`, where the text exists because the clip is being kept.
  */
 export function isDuplicate(text: string, lastCapturedText: string | null): boolean {
   return lastCapturedText !== null && text === lastCapturedText

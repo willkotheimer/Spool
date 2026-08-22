@@ -10,7 +10,9 @@ type Action = { type: 'state'; state: AppState }
 const initialState: AppState = {
   spool: { name: 'Default spool', mode: 'fifo', clips: [], cursorClipId: null, count: 0, cap: 50 },
   notice: null,
-  capture: { available: false, reason: null }
+  capture: { available: false, reason: null },
+  prompt: null,
+  privacy: { heuristics: [], consentTimeoutSeconds: 30, dataFilePath: null }
 }
 
 function reducer(_current: AppState, action: Action): AppState {

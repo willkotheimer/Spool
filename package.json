@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint .",
     "test": "vitest run",
-    "check:network": "node scripts/check-no-network.mjs"
+    "check:network": "node scripts/check-no-network.mjs",
+    "rebuild:native": "node-gyp rebuild --directory=native/clipboard"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

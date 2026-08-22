@@ -18,6 +18,8 @@ interface NativeSnapshot {
   formats: string[]
   text: Buffer | null
   sourceApp: string | null
+  /** The Windows `CanIncludeInClipboardHistory` value, when the clipboard carried it. */
+  canIncludeInClipboardHistory: number | null
 }
 
 interface NativeAddon {
@@ -64,17 +66,17 @@ export function loadClipboardWatcher(): WatcherLoad {
 }
 
 /**
- * Bytes to text, at the one place it happens.
- *
- * M5 moves the sensitivity detectors above this line so that a declined secret never becomes a
- * JavaScript string — strings are immutable and garbage-collected, so they cannot be wiped
- * (PLAN.md 4). Keeping the conversion in one function is what makes that change small.
+ * The addon's shape to the pipeline's shape. **No decoding happens here**: content stays as bytes
+ * all the way to the point where a clip is kept, so that a declined secret can be wiped rather than
+ * left in an immutable string the garbage collector will get to whenever it feels like it
+ * (PLAN.md 4).
  */
 function toSnapshot(native: NativeSnapshot): ClipboardSnapshot {
   return {
     formats: native.formats,
-    text: native.text === null ? null : native.text.toString('utf8'),
-    sourceApp: native.sourceApp
+    bytes: native.text,
+    sourceApp: native.sourceApp,
+    canIncludeInClipboardHistory: native.canIncludeInClipboardHistory ?? null
   }
 }
 

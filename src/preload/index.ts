@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { describeAction, type Platform } from '../main/accelerators'
-import { CHANNELS, type AppState } from '../shared/ipc'
+import { CHANNELS, type AppState, type ConsentChoice } from '../shared/ipc'
 
 /**
  * The only path between main and renderer (PLAN.md 6). Everything the renderer can reach is listed
@@ -16,6 +16,10 @@ const api = {
 
   /** The state as it stands right now, for a renderer that has just mounted. */
   getState: (): Promise<AppState> => ipcRenderer.invoke(CHANNELS.getState),
+
+  /** Answer the consent prompt (PLAN.md 4). */
+  answerConsent: (choice: ConsentChoice): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.answerConsent, choice),
 
   /** Every subsequent state. Returns its own unsubscribe, so React can clean up. */
   onState: (listener: (state: AppState) => void): (() => void) => {

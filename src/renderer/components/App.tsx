@@ -2,6 +2,7 @@ import { useState, type JSX } from 'react'
 import { capacityLabel } from '../helpers/ClipListHelper'
 import { useAppState } from '../state/useAppState'
 import { ClipList } from './ClipList'
+import { ConsentPrompt } from './ConsentPrompt'
 import { PrivacyPanel } from './PrivacyPanel'
 
 /**
@@ -11,10 +12,12 @@ import { PrivacyPanel } from './PrivacyPanel'
 export function App(): JSX.Element {
   const [showPrivacy, setShowPrivacy] = useState(false)
   const { summonHotkey, serveHotkey, modeHotkey, platform } = window.spool
-  const { spool, notice, capture } = useAppState()
+  const { spool, notice, capture, prompt, privacy } = useAppState()
 
   if (showPrivacy) {
-    return <PrivacyPanel platform={platform} onBack={() => setShowPrivacy(false)} />
+    return (
+      <PrivacyPanel platform={platform} privacy={privacy} onBack={() => setShowPrivacy(false)} />
+    )
   }
 
   return (
@@ -30,6 +33,10 @@ export function App(): JSX.Element {
       </header>
 
       <ClipList spool={spool} />
+
+      {prompt !== null && (
+        <ConsentPrompt prompt={prompt} onAnswer={(choice) => void window.spool.answerConsent(choice)} />
+      )}
 
       {notice !== null && (
         <p className="mx-2 mb-1 rounded bg-spool-paper/5 px-2 py-1.5 text-[11px] text-spool-paper/60">
