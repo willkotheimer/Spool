@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const SRC = join(ROOT, 'src')
+const NATIVE = join(ROOT, 'native')
 const SNAPSHOT = join(ROOT, 'deps-snapshot.json')
 
 /**
@@ -40,6 +41,22 @@ const FORBIDDEN_SOURCE = [
   { name: 'a URL passed to dynamic import()', pattern: /import\(\s*['"`]https?:\/\// }
 ]
 
+/**
+ * The addon is C++, so the JavaScript patterns above say nothing about it — and a compiled module
+ * can open a socket as easily as a script can. The guarantee is about what this app *could* do, so
+ * the rule reaches into `native/` with the names that reaching would need. Added at M3, alongside
+ * the addon that made it necessary.
+ */
+const FORBIDDEN_NATIVE = [
+  { name: 'winsock', pattern: /winsock|WSAStartup|WSASocket/i },
+  { name: 'a BSD socket call', pattern: /\b(socket|connect|getaddrinfo|gethostbyname)\s*\(/ },
+  { name: 'WinHTTP or WinINet', pattern: /winhttp|wininet|InternetOpen/i },
+  { name: 'libcurl', pattern: /curl_easy|curl\.h/i },
+  { name: 'Apple networking', pattern: /CFNetwork|NSURLSession|NWConnection/ }
+]
+
+const NATIVE_EXTENSIONS = /\.(cc|cpp|h|hpp|mm|m)$/
+
 const BANNED_DEPENDENCIES = [
   'axios',
   'node-fetch',
@@ -58,9 +75,29 @@ async function sourceFiles(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name)
     if (entry.isDirectory()) found.push(...(await sourceFiles(full)))
-    else if (/\.(ts|tsx|js|jsx|mjs|cjs|html)$/.test(entry.name)) found.push(full)
+    else if (/\.(ts|tsx|js|jsx|mjs|cjs|html|cc|cpp|h|hpp|mm|m)$/.test(entry.name)) found.push(full)
   }
   return found
+}
+
+async function checkNative() {
+  let files
+  try {
+    files = await sourceFiles(NATIVE)
+  } catch {
+    return // No native code in this checkout.
+  }
+
+  for (const file of files.filter((name) => NATIVE_EXTENSIONS.test(name))) {
+    const path = relative(ROOT, file).split(sep).join('/')
+    const lines = (await readFile(file, 'utf8')).split(/\r?\n/)
+
+    lines.forEach((line, index) => {
+      for (const { name, pattern } of FORBIDDEN_NATIVE) {
+        if (pattern.test(line)) fail(`${path}:${index + 1} names ${name} — ${line.trim()}`)
+      }
+    })
+  }
 }
 
 async function checkSource() {
@@ -136,6 +173,7 @@ function checkSnapshot(tree) {
 }
 
 await checkSource()
+await checkNative()
 const tree = JSON.parse(productionTree())
 checkDependencies(tree)
 checkSnapshot(tree)
@@ -150,4 +188,4 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
-console.log('Zero-network gate passed: no networking APIs in src/, no banned dependencies, tree matches snapshot.')
+console.log('Zero-network gate passed: no networking APIs in src/ or native/, no banned dependencies, tree matches snapshot.')

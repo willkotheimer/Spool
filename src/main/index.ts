@@ -5,8 +5,10 @@ installNetworkGuard()
 
 import { app, BrowserWindow, session } from 'electron'
 import { registerHotkeys, unregisterHotkeys } from './hotkeys'
+import { registerIpc } from './ipc'
+import { Session } from './session'
 import { createTray } from './tray'
-import { createCompactWindow, showCompactWindow } from './window'
+import { createCompactWindow, getCompactWindow, showCompactWindow } from './window'
 
 // One instance owns the tray icon and the hotkeys; a second launch summons the first.
 if (!app.requestSingleInstanceLock()) {
@@ -24,9 +26,17 @@ if (!app.requestSingleInstanceLock()) {
       app.isPackaged
     )
 
+    const spoolSession = new Session()
+    registerIpc(spoolSession, getCompactWindow)
+
     createCompactWindow()
     createTray()
     registerHotkeys()
+
+    // Watching starts once there is a window to report to, so a failure to load the addon is
+    // visible rather than lost to a console nobody is reading (PLAN.md 8).
+    spoolSession.startCapture()
+    app.on('will-quit', () => spoolSession.stopCapture())
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createCompactWindow()

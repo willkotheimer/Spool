@@ -1,14 +1,17 @@
 import { useState, type JSX } from 'react'
+import { capacityLabel } from '../helpers/ClipListHelper'
+import { useAppState } from '../state/useAppState'
+import { ClipList } from './ClipList'
 import { PrivacyPanel } from './PrivacyPanel'
 
 /**
- * The compact window (PLAN.md 8). Still empty of clips at M1 by design: it holds the shell the
- * later milestones fill in — the active spool, its mode pill, and the clip that serves next — plus
- * the privacy affordance, which is reachable in one click from here (PLAN.md 5f).
+ * The compact window (PLAN.md 8): the active spool's name, its mode pill, the clip that serves
+ * next, the clips behind it, and the privacy affordance. This is the state the app lives in.
  */
 export function App(): JSX.Element {
   const [showPrivacy, setShowPrivacy] = useState(false)
   const { summonHotkey, platform } = window.spool
+  const { spool, notice, capture } = useAppState()
 
   if (showPrivacy) {
     return <PrivacyPanel platform={platform} onBack={() => setShowPrivacy(false)} />
@@ -16,22 +19,36 @@ export function App(): JSX.Element {
 
   return (
     <main className="flex h-full flex-col bg-spool-ink text-spool-paper">
-      <header className="flex items-baseline justify-between px-4 pt-4">
-        <h1 className="text-lg font-semibold tracking-tight">Spool</h1>
-        <span className="text-xs text-spool-paper/50">no spool yet</span>
+      <header className="flex items-center justify-between gap-2 px-4 pt-4 pb-2">
+        <h1 className="truncate text-sm font-semibold tracking-tight">{spool.name}</h1>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="text-[10px] text-spool-paper/40">{capacityLabel(spool)}</span>
+          <span className="rounded-full border border-spool-thread/50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-spool-thread uppercase">
+            {spool.mode}
+          </span>
+        </div>
       </header>
 
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-        <div className="h-10 w-10 rounded-full border-2 border-spool-thread/70" />
-        <p className="text-sm text-spool-paper/70">Nothing captured yet.</p>
-      </div>
+      <ClipList spool={spool} />
 
-      <footer className="flex items-center justify-between px-4 pb-4 text-[11px] text-spool-paper/40">
-        <span>{summonHotkey} shows and hides this window.</span>
+      {notice !== null && (
+        <p className="mx-2 mb-1 rounded bg-spool-paper/5 px-2 py-1.5 text-[11px] text-spool-paper/60">
+          {notice.message}
+        </p>
+      )}
+
+      {!capture.available && capture.reason !== null && (
+        <p className="mx-2 mb-1 rounded bg-spool-thread/10 px-2 py-1.5 text-[11px] text-spool-thread">
+          Not capturing — {capture.reason}
+        </p>
+      )}
+
+      <footer className="flex items-center justify-between px-4 pb-3 text-[11px] text-spool-paper/40">
+        <span className="truncate">{summonHotkey} shows and hides this window.</span>
         <button
           type="button"
           onClick={() => setShowPrivacy(true)}
-          className="rounded px-2 py-1 text-spool-thread hover:bg-spool-paper/10"
+          className="shrink-0 rounded px-2 py-1 text-spool-thread hover:bg-spool-paper/10"
         >
           Privacy
         </button>

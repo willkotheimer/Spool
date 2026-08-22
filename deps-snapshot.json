@@ -1,3 +1,16 @@
 {
-  "dependencies": {}
+  "dependencies": {
+    "spool-clipboard": {
+      "version": "0.1.0",
+      "resolved": "file:../native/clipboard",
+      "overridden": false,
+      "dependencies": {
+        "node-addon-api": {
+          "version": "8.9.2",
+          "resolved": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-8.9.2.tgz",
+          "overridden": false
+        }
+      }
+    }
+  }
 }

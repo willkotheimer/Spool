@@ -370,6 +370,10 @@ dependency-absence proof it replaces.
   them, so it and its test are exempt **by exact path** — an exemption that cannot spread by accident
   is the only kind worth having. The scan reads whole lines, comments included: prose that names a
   banned API fails the build, which is blunt and correct.
+- C++ under `native/**` naming winsock, a BSD socket call, WinHTTP or WinINet, libcurl, or Apple's
+  networking frameworks. Added at M3 with the clipboard addon: a compiled module can open a socket
+  as easily as a script can, and a guarantee that only reads JavaScript would have stopped covering
+  the app the moment it grew native code.
 - A production dependency named `axios`, `node-fetch`, `got`, `undici`, `ws`, `superagent`, or
   `electron-updater`
 - A diff against a committed `npm ls --omit=dev` snapshot, so any *new* transitive dependency shows
@@ -409,6 +413,8 @@ src/
     guard.ts       the network kill switch of §5c, imported first
     index.ts
   preload/         the contextBridge surface — the only path between the two
+  shared/          types only — the shape of what crosses that surface. No behaviour, imported by
+                   both sides because neither may import the other. Added at M3.
   renderer/        React + TypeScript
     components/    render only
     helpers/       [ComponentName]Helper.ts — pure, tested
@@ -446,6 +452,12 @@ scripts/
 **The native-module tax.** `better-sqlite3-multiple-ciphers` and the clipboard addon are compiled
 against Electron's ABI, so both need `electron-rebuild` and both break on every Electron major
 version bump. Budget for it: this is the cost Electron charges in place of the one Rust would have.
+
+**Measured at M3: the clipboard addon does not pay it.** Written against N-API — which is ABI-stable
+across both Node and Electron versions rather than tied to V8's — the module compiled by `node-gyp`
+for Node 22 loaded unchanged in Electron 43. So no `electron-rebuild` step ships for it, and adding
+one would be a build step that does nothing. The tax is still owed by any module that uses V8
+headers directly, so M6 checks this again for SQLite rather than assuming.
 
 ---
 
@@ -554,6 +566,14 @@ not.
 This is the same conclusion IDEA.md reached on 2026-08-06, for the same reason: use
 `AddClipboardFormatListener`, and specifically **not** the legacy `SetClipboardViewer` chain, which
 breaks whenever any app in the chain misbehaves.
+
+**Reading the clipboard is itself a contended operation, and getting it wrong breaks other
+applications.** Opening the clipboard the instant `WM_CLIPBOARDUPDATE` arrives races the application
+that just copied: measured at M3, every `Clipboard::SetText` from another process failed with
+*"Requested Clipboard operation did not succeed"* while this listener was running. The listener
+therefore defers its read behind a short timer, holds the clipboard only long enough to copy bytes
+out — converting text and looking up the owning process after closing it — and backs off on a failed
+open. A clipboard manager that makes copying unreliable everywhere else is worse than none.
 
 The addon is also where the source application name comes from, and it is macOS-specific work again
 at M14 — `NSPasteboard`'s `changeCount` and `org.nspasteboard.ConcealedType`. Neither platform's
