@@ -16,5 +16,5 @@
     "noEmit": true,
     "composite": true
   },
-  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx"]
+  "include": ["src/shared/**/*.ts", "src/renderer/**/*.ts", "src/renderer/**/*.tsx"]
 }

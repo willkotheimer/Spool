@@ -12,17 +12,34 @@ export default tseslint.config(
     languageOptions: { globals: globals.node }
   },
   {
+    // The addon's loader is CommonJS, because a .node binary is loaded with require.
+    files: ['native/**/*.js'],
+    languageOptions: { globals: globals.node, sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' }
+  },
+  {
     files: ['src/renderer/**/*.{ts,tsx}'],
     extends: [reactHooks.configs.flat['recommended-latest']],
     languageOptions: { globals: globals.browser }
   },
   {
-    // The renderer never touches Node, and core logic never reaches for Electron (PLAN.md 6).
+    // The renderer never touches Node, and never reaches into the main process (PLAN.md 6).
+    // Type-only imports of the IPC view are the exception: they describe the shape of what crosses
+    // the contextBridge and erase entirely at build time, so no main-process code follows them.
     files: ['src/renderer/**/*.{ts,tsx}'],
     rules: {
-      'no-restricted-imports': [
+      '@typescript-eslint/no-restricted-imports': [
         'error',
-        { patterns: ['electron', 'node:*', '../main/*', '../../main/*'] }
+        {
+          patterns: [
+            { group: ['electron', 'node:*'], message: 'The renderer never touches Node or Electron.' },
+            {
+              group: ['**/main/**'],
+              allowTypeImports: true,
+              message: 'Only types may cross from main; everything else goes through the preload.'
+            }
+          ]
+        }
       ]
     }
   }

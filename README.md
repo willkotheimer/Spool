@@ -34,9 +34,15 @@ every request that is not reading local bytes, and the renderer ships a CSP with
 There is deliberately no auto-updater — an updater is network code, and it would void all of the
 above. Updates are manual downloads.
 
+## Building
+
+The clipboard listener is a native addon, so a first install compiles it. On Windows that needs
+Visual Studio Build Tools with the C++ workload and a Windows SDK; `npm install` runs `node-gyp`
+for you once they are there.
+
 ## Status
 
-M2 — the spool core: FIFO and LIFO cursor travel, reorder, deletion, and the clip caps, as pure
-TypeScript in `src/main/core/` with no I/O and no Electron import. Underneath it are M1's
-zero-network gate and privacy panel, and M0's tray icon, summon hotkey, and compact window. No
-clipboard capture and no storage yet; those arrive at M3 and M6.
+M3 — capture: copying text in any application files it into the default spool, which rolls at fifty
+clips. Images, files, and anything over 1 MiB are declined with a notice that says which, once per
+session. Underneath are M2's spool core, M1's zero-network gate and privacy panel, and M0's tray icon
+and summon hotkey. Nothing is stored yet, so restarting loses everything — persistence arrives at M6.
