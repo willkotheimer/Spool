@@ -4,17 +4,29 @@
  * The defaults deliberately avoid paste-adjacent combinations, and on Windows they avoid the
  * `Win+Shift+*` family the shell reserves for itself. Summon carries two bindings — `V` for the
  * paste-adjacent muscle memory, `C` for "clipboard" — because either is a reasonable thing to
- * reach for. Only summon exists at M0; the rest arrive with the actions they trigger.
+ * reach for. The rest take one binding each.
  */
 export type Platform = 'win32' | 'darwin' | 'linux'
 
-export type Action = 'summon'
+export type Action = 'summon' | 'serve' | 'toggleMode'
 
 const WINDOWS_MODIFIER = 'Super+Alt'
 const MAC_MODIFIER = 'Control+Alt'
 
 const KEYS: Record<Action, readonly string[]> = {
-  summon: ['V', 'C']
+  summon: ['V', 'C'],
+  serve: ['N'],
+  toggleMode: ['M']
+}
+
+/** Every action, in the order the tray lists them. */
+export const ACTIONS: readonly Action[] = ['summon', 'serve', 'toggleMode']
+
+/** What each action is called where a person reads it. */
+export const ACTION_LABELS: Record<Action, string> = {
+  summon: 'Summon',
+  serve: 'Serve next clip',
+  toggleMode: 'Toggle FIFO / LIFO'
 }
 
 /** Every accelerator a platform binds to an action. Non-Windows platforms follow the macOS shape. */

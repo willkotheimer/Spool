@@ -6,6 +6,8 @@ declare global {
   interface SpoolApi {
     readonly platform: 'win32' | 'darwin' | 'linux'
     readonly summonHotkey: string
+    readonly serveHotkey: string
+    readonly modeHotkey: string
     getState(): Promise<AppState>
     onState(listener: (state: AppState) => void): () => void
   }

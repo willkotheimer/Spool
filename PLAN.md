@@ -877,7 +877,11 @@ on a timing window alone; a slow machine will beat it.
 
 **Out of scope** — persistence, consent, any synthesized paste.
 **Acceptance** — copy A, B, C; press serve three times, pasting with Ctrl+V between each; receive A, B,
-C. Toggle to LIFO and repeat; receive C, B, A. The next-to-serve marker tracks the cursor throughout.
+C. Toggle to LIFO and repeat; receive C, B, A. **"Repeat" means the whole procedure — copy, then
+serve.** A mode change moves nothing but the direction of future travel (§3), so toggling a spool
+that was captured in FIFO leaves the cursor where it was and the next serve travels backward from
+*there*; it is capturing in LIFO that puts the cursor on the newest clip. Both readings were tested
+at M4; only this one is consistent with §3. The next-to-serve marker tracks the cursor throughout.
 **Serving never adds a clip** — the count is unchanged after twenty serves, in both modes. Serving once
 and pasting four times pastes the same clip four times. Ctrl+C and Ctrl+V behave exactly as they do with
 the app closed.

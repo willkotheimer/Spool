@@ -9,7 +9,11 @@
 
 export type Mode = 'fifo' | 'lifo'
 
-export type NoticeCategory = 'file' | 'image' | 'unsupported' | 'size'
+/**
+ * `nothing_to_paste` is the odd one out: the decline categories are said once per session, but a
+ * serve on an empty spool has to answer every time it is asked (PLAN.md 3).
+ */
+export type NoticeCategory = 'file' | 'image' | 'unsupported' | 'size' | 'nothing_to_paste'
 
 export interface Notice {
   readonly category: NoticeCategory

@@ -24,6 +24,13 @@ export interface CaptureState {
   readonly lastCapturedText: string | null
   /** Which decline categories have already been mentioned this session. */
   readonly ledger: NoticeLedger
+  /**
+   * What this app just wrote to the clipboard by serving, waiting to be recognised on its way back
+   * (PLAN.md 11, M4). Serving writes to the clipboard, which fires the very listener M3 built — so
+   * without this a serve re-captures its own clip as though the user had copied it, which is a
+   * duplicate on every serve and, in `lifo`, a spool that grows every time it is used.
+   */
+  readonly pendingSelfWrite: string | null
 }
 
 export interface CaptureOutcome {
@@ -35,7 +42,7 @@ export interface CaptureOutcome {
   /** What to tell the user, or null — either because nothing is wrong or because it was said. */
   readonly notice: Notice | null
   /** Why nothing was captured, for the log and for tests. */
-  readonly skipped: 'declined' | 'duplicate' | 'too_large' | 'spool_full' | null
+  readonly skipped: 'declined' | 'duplicate' | 'self_write' | 'too_large' | 'spool_full' | null
 }
 
 export interface CaptureDeps {
@@ -50,7 +57,13 @@ export function captureSnapshot(
   snapshot: ClipboardSnapshot,
   deps: CaptureDeps
 ): CaptureOutcome {
-  const unchanged = { state, captured: null, evicted: [] as readonly Clip[] }
+  const unchanged = { captured: null, evicted: [] as readonly Clip[] }
+
+  // The pending self-write is consumed by whichever clipboard change arrives next, matching or
+  // not. This is an identity check rather than a timing window: a slow machine beats a timer, and
+  // the plan says so explicitly.
+  const pendingSelfWrite = state.pendingSelfWrite
+  const cleared = pendingSelfWrite === null ? state : { ...state, pendingSelfWrite: null }
 
   const admission = admit(snapshot)
   if (!admission.admit) {
@@ -60,14 +73,19 @@ export function captureSnapshot(
     // A decline leaves the spool, the cursor, and the notice count untouched.
     return {
       ...unchanged,
-      state: said === null ? state : { ...state, ledger: said.ledger },
+      state: said === null ? cleared : { ...cleared, ledger: said.ledger },
       notice: said?.notice ?? null,
       skipped: 'declined'
     }
   }
 
-  if (isDuplicate(admission.text, state.lastCapturedText)) {
-    return { ...unchanged, notice: null, skipped: 'duplicate' }
+  if (admission.text === pendingSelfWrite) {
+    // Our own serve, arriving back as a clipboard change. Nothing happened here.
+    return { ...unchanged, state: cleared, notice: null, skipped: 'self_write' }
+  }
+
+  if (isDuplicate(admission.text, cleared.lastCapturedText)) {
+    return { ...unchanged, state: cleared, notice: null, skipped: 'duplicate' }
   }
 
   const clip = createClip({
@@ -77,7 +95,7 @@ export function captureSnapshot(
     sourceApp: snapshot.sourceApp ?? null
   })
 
-  const result = capture(state.spool, clip)
+  const result = capture(cleared.spool, clip)
 
   if (!result.ok) {
     // A saved spool refusing at its cap arrives with saved spools at M8, and it gets its own
@@ -85,19 +103,19 @@ export function captureSnapshot(
     // reads differently from a format decline, and says the real numbers.
     const said =
       result.reason === 'clip_too_large'
-        ? noticeFor(state.ledger, 'size', { bytes: clip.byteLength, limit: CLIP_BYTE_CAP })
+        ? noticeFor(cleared.ledger, 'size', { bytes: clip.byteLength, limit: CLIP_BYTE_CAP })
         : null
 
     return {
       ...unchanged,
-      state: said === null ? state : { ...state, ledger: said.ledger },
+      state: said === null ? cleared : { ...cleared, ledger: said.ledger },
       notice: said?.notice ?? null,
       skipped: result.reason === 'clip_too_large' ? 'too_large' : 'spool_full'
     }
   }
 
   return {
-    state: { ...state, spool: result.spool, lastCapturedText: admission.text },
+    state: { ...cleared, spool: result.spool, lastCapturedText: admission.text },
     captured: clip,
     evicted: result.evicted,
     notice: null,

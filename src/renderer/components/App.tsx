@@ -10,7 +10,7 @@ import { PrivacyPanel } from './PrivacyPanel'
  */
 export function App(): JSX.Element {
   const [showPrivacy, setShowPrivacy] = useState(false)
-  const { summonHotkey, platform } = window.spool
+  const { summonHotkey, serveHotkey, modeHotkey, platform } = window.spool
   const { spool, notice, capture } = useAppState()
 
   if (showPrivacy) {
@@ -43,15 +43,30 @@ export function App(): JSX.Element {
         </p>
       )}
 
-      <footer className="flex items-center justify-between px-4 pb-3 text-[11px] text-spool-paper/40">
-        <span className="truncate">{summonHotkey} shows and hides this window.</span>
-        <button
-          type="button"
-          onClick={() => setShowPrivacy(true)}
-          className="shrink-0 rounded px-2 py-1 text-spool-thread hover:bg-spool-paper/10"
-        >
-          Privacy
-        </button>
+      <footer className="px-4 pb-3 text-[11px] text-spool-paper/40">
+        <div className="flex items-end justify-between gap-2">
+          <dl className="min-w-0 space-y-0.5">
+            <div className="flex gap-1.5">
+              <dt className="shrink-0 text-spool-paper/60">{serveHotkey}</dt>
+              <dd className="truncate">puts the next clip on the clipboard, ready to paste</dd>
+            </div>
+            <div className="flex gap-1.5">
+              <dt className="shrink-0 text-spool-paper/60">{modeHotkey}</dt>
+              <dd className="truncate">switches {spool.mode === 'fifo' ? 'to newest first' : 'to oldest first'}</dd>
+            </div>
+            <div className="flex gap-1.5">
+              <dt className="shrink-0 text-spool-paper/60">{summonHotkey}</dt>
+              <dd className="truncate">shows and hides this window</dd>
+            </div>
+          </dl>
+          <button
+            type="button"
+            onClick={() => setShowPrivacy(true)}
+            className="shrink-0 rounded px-2 py-1 text-spool-thread hover:bg-spool-paper/10"
+          >
+            Privacy
+          </button>
+        </div>
       </footer>
     </main>
   )

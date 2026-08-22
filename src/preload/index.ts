@@ -11,6 +11,8 @@ import { CHANNELS, type AppState } from '../shared/ipc'
 const api = {
   platform: process.platform as Platform,
   summonHotkey: describeAction('summon', process.platform as Platform),
+  serveHotkey: describeAction('serve', process.platform as Platform),
+  modeHotkey: describeAction('toggleMode', process.platform as Platform),
 
   /** The state as it stands right now, for a renderer that has just mounted. */
   getState: (): Promise<AppState> => ipcRenderer.invoke(CHANNELS.getState),
