@@ -2,6 +2,7 @@ import { useState, type JSX } from 'react'
 import { capacityLabel } from '../helpers/ClipListHelper'
 import { useAppState } from '../state/useAppState'
 import { ClipList } from './ClipList'
+import { ExpandedView } from './ExpandedView'
 import { ConsentPrompt } from './ConsentPrompt'
 import { PrivacyPanel } from './PrivacyPanel'
 
@@ -11,8 +12,22 @@ import { PrivacyPanel } from './PrivacyPanel'
  */
 export function App(): JSX.Element {
   const [showPrivacy, setShowPrivacy] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const { summonHotkey, serveHotkey, modeHotkey, platform } = window.spool
-  const { spool, notice, capture, prompt, privacy, storage } = useAppState()
+  const state = useAppState()
+  const { spool, notice, capture, prompt, privacy, storage } = state
+
+  if (expanded) {
+    return (
+      <ExpandedView
+        state={state}
+        onCompact={() => {
+          setExpanded(false)
+          void window.spool.setWindowState('compact')
+        }}
+      />
+    )
+  }
 
   if (showPrivacy) {
     return (
@@ -29,6 +44,16 @@ export function App(): JSX.Element {
           <span className="rounded-full border border-spool-thread/50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-spool-thread uppercase">
             {spool.mode}
           </span>
+          <button
+            type="button"
+            onClick={() => {
+              setExpanded(true)
+              void window.spool.setWindowState('expanded')
+            }}
+            className="rounded border border-spool-paper/20 px-1.5 py-0.5 text-[10px] text-spool-paper/60 hover:bg-spool-paper/10"
+          >
+            Arrange
+          </button>
         </div>
       </header>
 

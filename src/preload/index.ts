@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { describeAction, type Platform } from '../main/accelerators'
-import { CHANNELS, type AppState, type ConsentChoice } from '../shared/ipc'
+import {
+  CHANNELS,
+  type AppState,
+  type ConsentChoice,
+  type SeparatorKind,
+  type WindowStateName
+} from '../shared/ipc'
 
 /**
  * The only path between main and renderer (PLAN.md 6). Everything the renderer can reach is listed
@@ -23,6 +29,22 @@ const api = {
 
   /** Throw away a store that cannot be opened and begin again (PLAN.md 11, M6). */
   startFreshStore: (): Promise<void> => ipcRenderer.invoke(CHANNELS.startFreshStore),
+
+  /** Write every clip in the active spool to the clipboard as one item (PLAN.md 3). */
+  pasteWholeSpool: (confirmed = false): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.pasteWholeSpool, confirmed),
+  cancelWholeSpoolPaste: (): Promise<void> => ipcRenderer.invoke(CHANNELS.cancelWholeSpoolPaste),
+
+  /** Apply an arrangement to the active spool, or keep it as a new one. */
+  saveArrangement: (clipIds: readonly string[]): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.saveArrangement, clipIds),
+  createSpoolFromArrangement: (name: string, clipIds: readonly string[]): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.createSpoolFromArrangement, name, clipIds),
+
+  setSeparator: (separator: SeparatorKind): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.setSeparator, separator),
+  setWindowState: (state: WindowStateName): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.setWindowState, state),
 
   /** Every subsequent state. Returns its own unsubscribe, so React can clean up. */
   onState: (listener: (state: AppState) => void): (() => void) => {

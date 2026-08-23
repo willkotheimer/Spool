@@ -13,7 +13,14 @@ export type Mode = 'fifo' | 'lifo'
  * `nothing_to_paste` is the odd one out: the decline categories are said once per session, but a
  * serve on an empty spool has to answer every time it is asked (PLAN.md 3).
  */
-export type NoticeCategory = 'file' | 'image' | 'unsupported' | 'size' | 'nothing_to_paste'
+export type NoticeCategory =
+  | 'file'
+  | 'image'
+  | 'unsupported'
+  | 'size'
+  | 'nothing_to_paste'
+  /** Confirmation that a whole spool is on the clipboard, or that an arrangement was saved. */
+  | 'pasted_spool'
 
 export interface Notice {
   readonly category: NoticeCategory
@@ -71,6 +78,26 @@ export interface StorageStatus {
   readonly path: string | null
 }
 
+/** How clips are joined when a whole spool is pasted (PLAN.md 3). */
+export type SeparatorKind = 'newline' | 'blank_line' | 'tab' | 'comma' | 'space' | 'none'
+
+/** Which size the window is in (PLAN.md 8). */
+export type WindowStateName = 'compact' | 'expanded'
+
+/** Enough of a spool to list it. Choosing which one captures is M8. */
+export interface SpoolSummary {
+  readonly id: string
+  readonly name: string
+  readonly count: number
+  readonly isActive: boolean
+}
+
+/** A joined result waiting on a yes, because it is large enough to be felt system-wide. */
+export interface PendingJoin {
+  readonly byteLength: number
+  readonly clips: number
+}
+
 export interface AppState {
   readonly spool: SpoolView
   /** The most recent decline, shown until the next capture replaces it. */
@@ -82,6 +109,9 @@ export interface AppState {
   /** For the privacy panel, so its claims come from the code rather than from prose (PLAN.md 5f). */
   readonly privacy: PrivacyFacts
   readonly storage: StorageStatus
+  readonly separator: SeparatorKind
+  readonly spools: readonly SpoolSummary[]
+  readonly pendingJoin: PendingJoin | null
 }
 
 /** The channel names, in one place so the two sides cannot drift apart. */
@@ -89,5 +119,11 @@ export const CHANNELS = {
   getState: 'spool:get-state',
   state: 'spool:state',
   answerConsent: 'spool:answer-consent',
-  startFreshStore: 'spool:start-fresh-store'
+  startFreshStore: 'spool:start-fresh-store',
+  pasteWholeSpool: 'spool:paste-whole-spool',
+  cancelWholeSpoolPaste: 'spool:cancel-whole-spool-paste',
+  saveArrangement: 'spool:save-arrangement',
+  createSpoolFromArrangement: 'spool:create-spool-from-arrangement',
+  setSeparator: 'spool:set-separator',
+  setWindowState: 'spool:set-window-state'
 } as const

@@ -15,8 +15,9 @@ import {
   type PendingConsent
 } from './clipboard/capture'
 import { loadClipboardWatcher, type ClipboardWatcher, type WatcherLoad } from './clipboard/watcher'
-import { createSpool, serve, setMode } from './core/spool'
-import type { Mode } from './core/types'
+import { isSeparatorKind, joinSpool, needsConfirmation, type SeparatorKind } from './core/join'
+import { arrange, createSpool, serve, setMode } from './core/spool'
+import type { Clip, Mode, Spool } from './core/types'
 import type { ClipboardSnapshot } from './detect/admit'
 import { wipe } from './detect/bytes'
 import {
@@ -53,6 +54,18 @@ export class Session {
   private pending: PendingConsent | null = null
   private pendingTimer: ReturnType<typeof setTimeout> | null = null
 
+  /**
+   * Spools other than the active one. At M7 these can only be created by "save as a new spool";
+   * choosing which one captures and serves is M8, and this list is what that will select from.
+   */
+  private otherSpools: Spool[] = []
+
+  /** How clips are joined when the whole spool is pasted, and what else the user has chosen. */
+  private settings: { separator: SeparatorKind } = { separator: 'newline' }
+
+  /** A joined result large enough to be felt system-wide, waiting on a yes (PLAN.md 3). */
+  private pendingJoin: { text: string; byteLength: number; clips: number } | null = null
+
   /** Where state is written through to. Null means this session keeps nothing (PLAN.md 11, M6). */
   private store: Store | null = null
   private storage: StorageStatus = {
@@ -79,9 +92,11 @@ export class Session {
     this.store = store
     this.storage = { available: true, reason: null, canStartFresh: false, path: store.path }
 
-    const [restored] = store.loadSpools()
+    const stored = store.loadSpools()
+    const restored = stored.find((spool) => spool.kind === 'default')
     const rules = store.loadSourceRules()
 
+    this.otherSpools = stored.filter((spool) => spool.kind !== 'default')
     this.state = {
       ...this.state,
       spool: restored ?? this.state.spool,
@@ -197,6 +212,104 @@ export class Session {
     this.publish()
   }
 
+  /**
+   * Write the whole spool to the clipboard as one item (PLAN.md 3).
+   *
+   * Position order travelling in the mode's direction, **always from the beginning** — "paste
+   * everything" means everything — and the cursor does not move, because this is a bulk read
+   * rather than a traversal. Above 10 MiB it asks first: the clipboard is shared with every
+   * application on the machine.
+   */
+  pasteWholeSpool(confirmed = false): void {
+    const joined = joinSpool(this.state.spool, this.settings.separator)
+
+    if (!joined.ok) {
+      this.notice = NOTHING_TO_PASTE
+      this.publish()
+      return
+    }
+
+    if (!confirmed && needsConfirmation(joined.byteLength)) {
+      this.pendingJoin = joined
+      this.publish()
+      return
+    }
+
+    this.pendingJoin = null
+    this.writeText(joined.text)
+
+    // The joined text must not come back as a new clip, which would be a spool that doubles itself
+    // every time it is used (PLAN.md 3). This is M4's suppression, holding against a payload that
+    // matches no single clip.
+    this.state = { ...this.state, pendingSelfWrite: joined.text }
+    this.notice = {
+      category: 'pasted_spool',
+      message: `${joined.clips} clips are on the clipboard, ready to paste`
+    }
+    this.publish()
+  }
+
+  /** Abandon a whole-spool paste the user was asked to confirm. */
+  cancelWholeSpoolPaste(): void {
+    this.pendingJoin = null
+    this.publish()
+  }
+
+  setSeparator(separator: SeparatorKind): void {
+    // Anything crossing the bridge is checked here rather than trusted: the renderer is not the
+    // authority on what a separator is.
+    if (!isSeparatorKind(separator)) return
+
+    this.settings = { ...this.settings, separator }
+    this.publish()
+  }
+
+  getSeparator(): SeparatorKind {
+    return this.settings.separator
+  }
+
+  /**
+   * Apply an arrangement to the active spool (PLAN.md 11, M7).
+   *
+   * The order arrives as clip ids, so the renderer never has to know about positions — and the
+   * cursor follows the clip it pointed at, wherever it lands, because it is an identity (PLAN.md 3).
+   */
+  saveArrangement(clipIds: readonly string[]): void {
+    const rearranged = arrange(this.state.spool.clips, clipIds)
+    if (rearranged === null) return
+
+    this.state = { ...this.state, spool: { ...this.state.spool, clips: rearranged } }
+    this.publish()
+  }
+
+  /**
+   * Save an arrangement as a *new* named spool, leaving the original untouched (PLAN.md 13, 1).
+   *
+   * Read as: keep what you have, and keep this arrangement of it too.
+   */
+  createSpoolFromArrangement(name: string, clipIds: readonly string[], newId: () => string = () => randomUUID()): void {
+    const rearranged = arrange(this.state.spool.clips, clipIds)
+    if (rearranged === null) return
+
+    const copied = rearranged.map((clip): Clip => ({ ...clip, id: newId() }))
+    const created: Spool = {
+      id: newId(),
+      name: name.trim().length === 0 ? 'New spool' : name.trim(),
+      kind: 'saved',
+      mode: this.state.spool.mode,
+      clips: copied,
+      cursorClipId: copied[0]?.id ?? null
+    }
+
+    this.otherSpools = [...this.otherSpools, created]
+    this.store?.saveSpool(created)
+    this.notice = {
+      category: 'pasted_spool',
+      message: `Saved ${copied.length} clips as "${created.name}"`
+    }
+    this.publish()
+  }
+
   /** Change direction. The cursor stays on the clip it was on (PLAN.md 3). */
   toggleMode(): void {
     const next: Mode = this.state.spool.mode === 'fifo' ? 'lifo' : 'fifo'
@@ -210,6 +323,20 @@ export class Session {
       notice: this.notice,
       capture: this.capture,
       storage: this.storage,
+      separator: this.settings.separator,
+      spools: [
+        { id: this.state.spool.id, name: this.state.spool.name, count: this.state.spool.clips.length, isActive: true },
+        ...this.otherSpools.map((spool) => ({
+          id: spool.id,
+          name: spool.name,
+          count: spool.clips.length,
+          isActive: false
+        }))
+      ],
+      pendingJoin:
+        this.pendingJoin === null
+          ? null
+          : { byteLength: this.pendingJoin.byteLength, clips: this.pendingJoin.clips },
       prompt: this.promptView(),
       privacy: {
         heuristics: HEURISTIC_RULES,

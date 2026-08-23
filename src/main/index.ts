@@ -10,9 +10,12 @@ import { Session } from './session'
 import { explainStorageFailure, openStore, startFresh, storePaths } from './store'
 import { writeClipboardText } from './clipboard/writer'
 import { createTray } from './tray'
+import { loadSettings, saveSettings, settingsPath, type WindowState } from './settings'
 import {
   createCompactWindow,
   getCompactWindow,
+  restoreWindowState,
+  setWindowState,
   showCompactWindow,
   toggleCompactWindow
 } from './window'
@@ -40,6 +43,10 @@ if (!app.requestSingleInstanceLock()) {
      * to the window rather than thrown: an app that cannot store is still an app that can capture
      * and serve, and the user is owed an explanation and whatever way out exists.
      */
+    const settingsFile = settingsPath(app.getPath('userData'))
+    const settings = loadSettings(settingsFile)
+    restoreWindowState(settings.window)
+
     const paths = storePaths(app.getPath('userData'))
     const attach = (result: ReturnType<typeof openStore>): void => {
       if (result.ok) spoolSession.attachStore(result.store)
@@ -47,13 +54,30 @@ if (!app.requestSingleInstanceLock()) {
     }
     attach(openStore(paths, safeStorage))
 
-    registerIpc(spoolSession, getCompactWindow, () => attach(startFresh(paths, safeStorage)))
+    spoolSession.setSeparator(settings.separator)
+
+    registerIpc(spoolSession, getCompactWindow, {
+      startFreshStore: () => attach(startFresh(paths, safeStorage)),
+      setWindowState: (state: WindowState) => {
+        setWindowState(state)
+        saveSettings(settingsFile, { separator: spoolSession.getSeparator(), window: state })
+      }
+    })
+
+    // Remember a separator change too, so the choice survives a restart.
+    spoolSession.onChange(() =>
+      saveSettings(settingsFile, {
+        separator: spoolSession.getSeparator(),
+        window: settings.window
+      })
+    )
 
     createCompactWindow()
     createTray()
     registerHotkeys({
       summon: () => toggleCompactWindow(),
       serve: () => spoolSession.serveNext(),
+      pasteAll: () => spoolSession.pasteWholeSpool(),
       toggleMode: () => spoolSession.toggleMode()
     })
 
