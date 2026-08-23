@@ -7,6 +7,7 @@ declare global {
     readonly platform: 'win32' | 'darwin' | 'linux'
     readonly summonHotkey: string
     readonly serveHotkey: string
+    readonly pasteAllHotkey: string
     readonly modeHotkey: string
     getState(): Promise<AppState>
     answerConsent(choice: ConsentChoice): Promise<void>

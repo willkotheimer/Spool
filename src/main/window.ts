@@ -1,5 +1,6 @@
 import { join } from 'node:path'
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, screen } from 'electron'
+import { anchoredBounds } from './window-bounds'
 
 /** Compact window size (PLAN.md 8) — about the size of Snipping Tool. */
 export const COMPACT_WIDTH = 360
@@ -82,9 +83,11 @@ export function setWindowState(state: WindowStateName): void {
   if (window === null) return
 
   const size = state === 'expanded' ? expandedSize() : compactSize()
+  const current = window.getBounds()
+  const workArea = screen.getDisplayMatching(current).workArea
+
   window.setResizable(state === 'expanded')
-  window.setSize(size.width, size.height, true)
-  window.center()
+  window.setBounds(anchoredBounds(current, size, workArea), true)
 }
 
 export function getWindowState(): WindowStateName {
