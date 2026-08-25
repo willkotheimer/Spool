@@ -47,6 +47,18 @@ const api = {
   setWindowState: (state: WindowStateName): Promise<void> =>
     ipcRenderer.invoke(CHANNELS.setWindowState, state),
 
+  /** Managing spools and clips (PLAN.md 11, M8). */
+  createSpool: (name: string): Promise<string | null> =>
+    ipcRenderer.invoke(CHANNELS.createSpool, name),
+  renameSpool: (spoolId: string, name: string): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.renameSpool, spoolId, name),
+  deleteSpool: (spoolId: string): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.deleteSpool, spoolId),
+  setActiveSpool: (spoolId: string): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.setActiveSpool, spoolId),
+  deleteClip: (clipId: string): Promise<void> => ipcRenderer.invoke(CHANNELS.deleteClip, clipId),
+  clearSpool: (spoolId: string): Promise<void> => ipcRenderer.invoke(CHANNELS.clearSpool, spoolId),
+
   /** Every subsequent state. Returns its own unsubscribe, so React can clean up. */
   onState: (listener: (state: AppState) => void): (() => void) => {
     const handler = (_event: unknown, state: AppState): void => listener(state)

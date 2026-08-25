@@ -30,11 +30,13 @@ import { moveClip, sourceLabel } from '../helpers/ArrangeListHelper'
 export function ArrangeList({
   clips,
   cursorClipId,
-  onChange
+  onChange,
+  onDelete
 }: {
   clips: readonly ClipView[]
   cursorClipId: string | null
   onChange: (clipIds: string[]) => void
+  onDelete: (clipId: string) => void
 }): JSX.Element {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -74,6 +76,7 @@ export function ArrangeList({
               position={index + 1}
               isNext={clip.id === cursorClipId}
               onMove={(direction) => onChange(moveClip(ids, index, index + direction))}
+              onDelete={() => onDelete(clip.id)}
             />
           ))}
         </ol>
@@ -86,12 +89,14 @@ function Row({
   clip,
   position,
   isNext,
-  onMove
+  onMove,
+  onDelete
 }: {
   clip: ClipView
   position: number
   isNext: boolean
   onMove: (direction: -1 | 1) => void
+  onDelete: () => void
 }): JSX.Element {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: clip.id
@@ -141,6 +146,10 @@ function Row({
         </MoveButton>
         <MoveButton label={`Move ${clip.preview} down`} onClick={() => onMove(1)}>
           ↓
+        </MoveButton>
+        {/* Deletion is something the user did, never a side effect of pasting (invariant 7). */}
+        <MoveButton label={`Delete ${clip.preview}`} onClick={onDelete}>
+          ✕
         </MoveButton>
       </span>
     </li>

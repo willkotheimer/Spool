@@ -43,8 +43,8 @@ nested directory fails on Windows' 260-character path limit.
 
 ## Status
 
-M7 — arrange and paste the whole spool: an expanded window with a draggable, keyboard-reorderable
-clip list; save an arrangement to the spool or keep it as a new one; and `Win+Alt+A` puts every clip
-on the clipboard at once, joined by the separator you chose, for a single Ctrl+V. Underneath are M6's
-encrypted store, M5's consent prompts, M4's serve, M3's capture, M2's spool core, M1's zero-network
-gate, and M0's tray icon and summon hotkey. Switching between spools arrives at M8.
+M8 — managing spools: make, rename, clear, and delete spools, switch which one captures, and delete
+a single clip. The default spool can be cleared but never deleted — something has to catch the next
+copy. Underneath are M7's arranging and whole-spool paste, M6's encrypted store, M5's consent
+prompts, M4's serve, M3's capture, M2's spool core, M1's zero-network gate, and M0's tray icon and
+summon hotkey.

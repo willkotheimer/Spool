@@ -3,6 +3,7 @@ import type { AppState, SeparatorKind } from '../../shared/ipc'
 import { hasChanged, sameClips } from '../helpers/ArrangeListHelper'
 import { formatBytes, separatorOptions } from '../helpers/ExpandedViewHelper'
 import { ArrangeList } from './ArrangeList'
+import { SpoolSidebar } from './SpoolSidebar'
 
 /**
  * The expanded window (PLAN.md 8): the full clip list with drag handles, the arrangement controls,
@@ -60,7 +61,9 @@ export function ExpandedView({
 
       <div className="flex min-h-0 flex-1">
         <section className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          <ArrangeList clips={orderedClips} cursorClipId={spool.cursorClipId} onChange={setDraft} />
+          <ArrangeList clips={orderedClips} cursorClipId={spool.cursorClipId} onChange={setDraft}
+            onDelete={(clipId) => void window.spool.deleteClip(clipId)}
+          />
         </section>
 
         <aside className="w-64 shrink-0 space-y-4 border-l border-spool-paper/10 px-4 py-3 text-xs">
@@ -138,20 +141,7 @@ export function ExpandedView({
             </p>
           </div>
 
-          {spools.length > 1 && (
-            <div className="space-y-1">
-              <h2 className="text-[11px] font-semibold tracking-wide text-spool-thread uppercase">
-                Spools
-              </h2>
-              {spools.map((summary) => (
-                <p key={summary.id} className="flex justify-between text-spool-paper/50">
-                  <span className="truncate">{summary.name}</span>
-                  <span>{summary.count}</span>
-                </p>
-              ))}
-              <p className="text-[10px] text-spool-paper/35">Switching between them arrives at M8.</p>
-            </div>
-          )}
+          <SpoolSidebar spools={spools} />
         </aside>
       </div>
 

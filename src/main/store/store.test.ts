@@ -8,7 +8,13 @@ import { createSpool } from '../core/spool'
 import { migrate, openDatabase, schemaVersion } from './database'
 import { discardStore, loadOrCreateKey, type Sealer } from './key'
 import { CURRENT_SCHEMA_VERSION, pendingMigrations } from './migrations'
-import { loadSourceRules, loadSpools, saveSourceRules, saveSpool } from './repository'
+import {
+  deleteSpool,
+  loadSourceRules,
+  loadSpools,
+  saveSourceRules,
+  saveSpool
+} from './repository'
 import { explainStorageFailure } from './index'
 
 let directory: string
@@ -375,5 +381,93 @@ describe('positions on disk (PLAN.md 11, M7)', () => {
 
     expect(rows.map((row) => row.position)).toEqual([0, 1, 2, 3, 4])
     expect(rows.map((row) => row.id)).toEqual(['c', 'a', 'e', 'b', 'd'])
+  })
+})
+
+describe('managing spools (PLAN.md 11, M8)', () => {
+  const open = () => {
+    const result = openDatabase(paths().database, 'f'.repeat(64))
+    if (!result.ok) throw new Error(result.detail)
+    return result.database
+  }
+
+  it('deleting a spool takes its clips with it, through the schema cascade', () => {
+    const database = open()
+    saveSpool(
+      database,
+      {
+        ...createSpool({ id: 'keep', name: 'Keep', kind: 'saved' }),
+        clips: [clip('k1')],
+        cursorClipId: 'k1'
+      },
+      NOW
+    )
+    saveSpool(
+      database,
+      {
+        ...createSpool({ id: 'gone', name: 'Gone', kind: 'saved' }),
+        clips: [clip('g1'), clip('g2')],
+        cursorClipId: 'g1'
+      },
+      NOW
+    )
+
+    deleteSpool(database, 'gone')
+
+    const spools = loadSpools(database)
+    const remainingClips = database.prepare('SELECT count(*) AS n FROM clips').get() as { n: number }
+    database.close()
+
+    expect(spools.map((spool) => spool.id)).toEqual(['keep'])
+    expect(remainingClips.n).toBe(1)
+  })
+
+  it('round-trips several spools, each with its own mode and cursor', () => {
+    const database = open()
+    saveSpool(
+      database,
+      {
+        ...createSpool({ id: 'default', name: 'Default spool', kind: 'default', mode: 'fifo' }),
+        clips: [clip('a'), clip('b')],
+        cursorClipId: 'a'
+      },
+      NOW
+    )
+    saveSpool(
+      database,
+      {
+        ...createSpool({ id: 'saved', name: 'Q3 figures', kind: 'saved', mode: 'lifo' }),
+        clips: [clip('c')],
+        cursorClipId: 'c'
+      },
+      NOW
+    )
+
+    const restored = loadSpools(database)
+    database.close()
+
+    expect(restored.map((spool) => [spool.name, spool.kind, spool.mode])).toEqual([
+      ['Default spool', 'default', 'fifo'],
+      ['Q3 figures', 'saved', 'lifo']
+    ])
+  })
+
+  it('clearing a spool leaves the spool and removes only its clips', () => {
+    const database = open()
+    const spool = {
+      ...createSpool({ id: 's', name: 'S', kind: 'saved' }),
+      clips: [clip('a'), clip('b')],
+      cursorClipId: 'a'
+    }
+    saveSpool(database, spool, NOW)
+
+    saveSpool(database, { ...spool, clips: [], cursorClipId: null }, NOW)
+
+    const [restored] = loadSpools(database)
+    database.close()
+
+    expect(restored.name).toBe('S')
+    expect(restored.clips).toEqual([])
+    expect(restored.cursorClipId).toBeNull()
   })
 })

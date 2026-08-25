@@ -115,6 +115,16 @@ export function saveSpool(database: SpoolDatabase, spool: Spool, now: string): v
   })()
 }
 
+/**
+ * Remove a spool and, with it, every clip on it.
+ *
+ * The cascade is the schema's (`ON DELETE CASCADE` in PLAN.md 7), which is why `foreign_keys` is
+ * turned on when the database opens — without it SQLite would leave the clips behind as orphans.
+ */
+export function deleteSpool(database: SpoolDatabase, spoolId: string): void {
+  database.prepare('DELETE FROM spools WHERE id = ?').run(spoolId)
+}
+
 export function loadSourceRules(database: SpoolDatabase): Map<string, SourceAction> {
   const rows = database.prepare('SELECT source_app, action FROM source_rules').all() as Array<{
     source_app: string

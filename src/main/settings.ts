@@ -18,11 +18,17 @@ export interface Settings {
   readonly separator: SeparatorKind
   /** Which state the window was last in. The app remembers (PLAN.md 8). */
   readonly window: WindowState
+  /**
+   * Which spool captures and serves. A pointer into the store rather than data of its own, so it
+   * belongs with the preferences: a stale id simply falls back to the default spool.
+   */
+  readonly activeSpoolId: string | null
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   separator: DEFAULT_SEPARATOR,
-  window: 'compact'
+  window: 'compact',
+  activeSpoolId: null
 }
 
 export function settingsPath(userDataDirectory: string): string {
@@ -57,7 +63,8 @@ export function loadSettings(path: string): Settings {
     separator: SEPARATORS.includes(raw.separator as SeparatorKind)
       ? (raw.separator as SeparatorKind)
       : DEFAULT_SETTINGS.separator,
-    window: raw.window === 'expanded' ? 'expanded' : 'compact'
+    window: raw.window === 'expanded' ? 'expanded' : 'compact',
+    activeSpoolId: typeof raw.activeSpoolId === 'string' ? raw.activeSpoolId : null
   }
 }
 

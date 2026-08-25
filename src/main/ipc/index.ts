@@ -52,6 +52,17 @@ export function registerIpc(
     actions.setWindowState(state)
   )
 
+  ipcMain.handle(CHANNELS.createSpool, (_event, name: string) => session.createNamedSpool(name))
+  ipcMain.handle(CHANNELS.renameSpool, (_event, spoolId: string, name: string) =>
+    session.renameSpool(spoolId, name)
+  )
+  ipcMain.handle(CHANNELS.deleteSpool, (_event, spoolId: string) => session.deleteSpool(spoolId))
+  ipcMain.handle(CHANNELS.setActiveSpool, (_event, spoolId: string) =>
+    session.setActiveSpool(spoolId)
+  )
+  ipcMain.handle(CHANNELS.deleteClip, (_event, clipId: string) => session.deleteClip(clipId))
+  ipcMain.handle(CHANNELS.clearSpool, (_event, spoolId: string) => session.clearSpool(spoolId))
+
   const unsubscribe = session.onChange((state) => {
     const window = windowFor()
     if (window !== null && !window.isDestroyed()) {
@@ -69,6 +80,12 @@ export function registerIpc(
     ipcMain.removeHandler(CHANNELS.createSpoolFromArrangement)
     ipcMain.removeHandler(CHANNELS.setSeparator)
     ipcMain.removeHandler(CHANNELS.setWindowState)
+    ipcMain.removeHandler(CHANNELS.createSpool)
+    ipcMain.removeHandler(CHANNELS.renameSpool)
+    ipcMain.removeHandler(CHANNELS.deleteSpool)
+    ipcMain.removeHandler(CHANNELS.setActiveSpool)
+    ipcMain.removeHandler(CHANNELS.deleteClip)
+    ipcMain.removeHandler(CHANNELS.clearSpool)
     unsubscribe()
   }
 }
