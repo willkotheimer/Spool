@@ -7,7 +7,7 @@ import { app, BrowserWindow, safeStorage, session } from 'electron'
 import { registerHotkeys, unregisterHotkeys } from './hotkeys'
 import { registerIpc } from './ipc'
 import { Session } from './session'
-import { explainStorageFailure, openStore, startFresh, storePaths } from './store'
+import { explainStorageFailure, openStore, resetEverything, startFresh, storePaths } from './store'
 import { writeClipboardText } from './clipboard/writer'
 import { createTray } from './tray'
 import { loadSettings, saveSettings, settingsPath, type WindowState } from './settings'
@@ -55,15 +55,35 @@ if (!app.requestSingleInstanceLock()) {
     attach(openStore(paths, safeStorage))
 
     spoolSession.setSeparator(settings.separator)
+    spoolSession.setConsentTimeout(settings.consentTimeoutSeconds)
 
     registerIpc(spoolSession, getCompactWindow, {
       startFreshStore: () => attach(startFresh(paths, safeStorage)),
+
+      /**
+       * The failsafe (PLAN.md 11, M9). The handle is closed first because Windows will not delete
+       * a file that is still open; everything after that is blind deletion, so a corrupt store
+       * clears exactly as easily as a healthy one. On success the app relaunches, which is the
+       * honest way to reach a first-run state rather than reconstructing one in place.
+       */
+      resetEverything: () => {
+        spoolSession.closeStore()
+        const result = resetEverything(paths, [settingsFile])
+        if (result.failed.length === 0) {
+          app.relaunch()
+          app.exit(0)
+        } else {
+          attach(openStore(paths, safeStorage))
+        }
+        return { failed: result.failed }
+      },
       setWindowState: (state: WindowState) => {
         setWindowState(state)
         saveSettings(settingsFile, {
           separator: spoolSession.getSeparator(),
           window: state,
-          activeSpoolId: spoolSession.getActiveSpoolId()
+          activeSpoolId: spoolSession.getActiveSpoolId(),
+          consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds()
         })
       }
     })
@@ -73,7 +93,8 @@ if (!app.requestSingleInstanceLock()) {
       saveSettings(settingsFile, {
         separator: spoolSession.getSeparator(),
         window: settings.window,
-        activeSpoolId: spoolSession.getActiveSpoolId()
+        activeSpoolId: spoolSession.getActiveSpoolId(),
+        consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds()
       })
     )
 

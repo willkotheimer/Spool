@@ -5,6 +5,7 @@ import { ClipList } from './ClipList'
 import { ExpandedView } from './ExpandedView'
 import { ConsentPrompt } from './ConsentPrompt'
 import { PrivacyPanel } from './PrivacyPanel'
+import { SettingsPanel } from './SettingsPanel'
 
 /**
  * The compact window (PLAN.md 8): the active spool's name, its mode pill, the clip that serves
@@ -22,6 +23,7 @@ function Hint({ keys, children }: { keys: string; children: string }): JSX.Eleme
 export function App(): JSX.Element {
   const [showPrivacy, setShowPrivacy] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const { summonHotkey, serveHotkey, pasteAllHotkey, modeHotkey, platform } = window.spool
   const state = useAppState()
   const { spool, notice, capture, prompt, privacy, storage } = state
@@ -36,6 +38,10 @@ export function App(): JSX.Element {
         }}
       />
     )
+  }
+
+  if (showSettings) {
+    return <SettingsPanel state={state} onBack={() => setShowSettings(false)} />
   }
 
   if (showPrivacy) {
@@ -107,13 +113,22 @@ export function App(): JSX.Element {
             <Hint keys={modeHotkey}>{spool.mode === 'fifo' ? 'newest first' : 'oldest first'}</Hint>
             <Hint keys={summonHotkey}>show and hide</Hint>
           </dl>
-          <button
-            type="button"
-            onClick={() => setShowPrivacy(true)}
-            className="shrink-0 rounded px-2 py-1 text-spool-thread hover:bg-spool-paper/10"
-          >
-            Privacy
-          </button>
+          <span className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="rounded px-2 py-1 text-spool-paper/60 hover:bg-spool-paper/10"
+            >
+              Settings
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowPrivacy(true)}
+              className="rounded px-2 py-1 text-spool-thread hover:bg-spool-paper/10"
+            >
+              Privacy
+            </button>
+          </span>
         </div>
       </footer>
     </main>

@@ -16,7 +16,14 @@ import {
 } from './clipboard/capture'
 import { loadClipboardWatcher, type ClipboardWatcher, type WatcherLoad } from './clipboard/watcher'
 import { isSeparatorKind, joinSpool, needsConfirmation, type SeparatorKind } from './core/join'
-import { SAVED_SPOOL_CAP } from './core/limits'
+import {
+  CLIP_BYTE_CAP,
+  DEFAULT_SPOOL_CLIP_CAP,
+  SAVED_SPOOL_CAP,
+  SAVED_SPOOL_CLIP_CAP,
+  STORE_BYTE_BUDGET
+} from './core/limits'
+import { expireClips, isRetentionHours } from './core/retention'
 import { arrange, clear, createSpool, deleteClip, serve, setMode } from './core/spool'
 import type { Clip, Mode, Spool } from './core/types'
 import type { ClipboardSnapshot } from './detect/admit'
@@ -62,7 +69,10 @@ export class Session {
   private otherSpools: Spool[] = []
 
   /** How clips are joined when the whole spool is pasted, and what else the user has chosen. */
-  private settings: { separator: SeparatorKind } = { separator: 'newline' }
+  private settings: { separator: SeparatorKind; consentTimeoutMs: number } = {
+    separator: 'newline',
+    consentTimeoutMs: CONSENT_TIMEOUT_MS
+  }
 
   /** A joined result large enough to be felt system-wide, waiting on a yes (PLAN.md 3). */
   private pendingJoin: { text: string; byteLength: number; clips: number } | null = null
@@ -103,6 +113,15 @@ export class Session {
       spool: restored ?? this.state.spool,
       sourceRules: rules
     }
+    // Age out anything that expired while the app was closed, before anything else sees it.
+    const now = new Date()
+    this.otherSpools = this.otherSpools.map((spool) => {
+      const aged = expireOne(spool, now)
+      if (aged !== spool) store.saveSpool(aged)
+      return aged
+    })
+    this.state = { ...this.state, spool: expireOne(this.state.spool, now) }
+
     // Restore whichever spool was active, falling back to the default when the id is stale.
     const wanted = this.otherSpools.find((spool) => spool.id === activeSpoolId)
     if (wanted !== undefined) this.activate(wanted)
@@ -154,6 +173,8 @@ export class Session {
     const outcome = captureSnapshot(this.state, snapshot, this.deps)
 
     this.absorb(outcome)
+    // Retention applies on capture as well as on launch, so a long session ages out too.
+    this.expireActive()
   }
 
   /**
@@ -308,7 +329,8 @@ export class Session {
       kind: 'saved',
       mode: this.state.spool.mode,
       clips: copied,
-      cursorClipId: copied[0]?.id ?? null
+      cursorClipId: copied[0]?.id ?? null,
+      retentionHours: null
     }
 
     this.otherSpools = [...this.otherSpools, created]
@@ -428,10 +450,67 @@ export class Session {
     this.publish()
   }
 
+  /**
+   * Set how long clips live on a spool (PLAN.md 11, M9), and apply it at once so the user sees the
+   * effect of what they chose rather than waiting for the next capture to reveal it.
+   */
+  setRetention(spoolId: string, hours: number | null): void {
+    if (!isRetentionHours(hours)) return
+
+    if (spoolId === this.state.spool.id) {
+      this.state = { ...this.state, spool: { ...this.state.spool, retentionHours: hours } }
+      this.expireActive()
+    } else {
+      this.otherSpools = this.otherSpools.map((spool) =>
+        spool.id === spoolId ? expireOne({ ...spool, retentionHours: hours }, new Date()) : spool
+      )
+      const spool = this.otherSpools.find((candidate) => candidate.id === spoolId)
+      if (spool !== undefined) this.store?.saveSpool(spool)
+    }
+
+    this.publish()
+  }
+
+  /** Revoke a standing answer, so the next clip from that application asks again (PLAN.md 4). */
+  revokeSourceRule(sourceApp: string): void {
+    const rules = new Map(this.state.sourceRules)
+    if (!rules.delete(sourceApp)) return
+
+    this.state = { ...this.state, sourceRules: rules }
+    this.publish()
+  }
+
+  /** How long a prompt waits before answering itself with Skip (PLAN.md 4). */
+  setConsentTimeout(seconds: number): void {
+    if (!Number.isFinite(seconds) || seconds < 5 || seconds > 600) return
+
+    this.settings = { ...this.settings, consentTimeoutMs: Math.round(seconds) * 1000 }
+    this.publish()
+  }
+
+  getConsentTimeoutSeconds(): number {
+    return Math.round(this.settings.consentTimeoutMs / 1000)
+  }
+
+  /** Close the store so its file can be removed. The failsafe needs the handle gone (M9). */
+  closeStore(): void {
+    this.store?.close()
+    this.store = null
+  }
+
   /** Change direction. The cursor stays on the clip it was on (PLAN.md 3). */
   toggleMode(): void {
     const next: Mode = this.state.spool.mode === 'fifo' ? 'lifo' : 'fifo'
     this.state = { ...this.state, spool: setMode(this.state.spool, next) }
+    this.publish()
+  }
+
+  /** Apply the active spool's retention limit, publishing only if something actually went. */
+  private expireActive(): void {
+    const aged = expireOne(this.state.spool, new Date())
+    if (aged === this.state.spool) return
+
+    this.state = { ...this.state, spool: aged }
     this.publish()
   }
 
@@ -468,7 +547,8 @@ export class Session {
           name: spool.name,
           count: spool.clips.length,
           isActive: spool.id === this.state.spool.id,
-          isDefault: spool.kind === 'default'
+          isDefault: spool.kind === 'default',
+          retentionHours: spool.retentionHours
         }))
         .sort((a, b) => (a.isDefault === b.isDefault ? 0 : a.isDefault ? -1 : 1)),
       pendingJoin:
@@ -478,7 +558,18 @@ export class Session {
       prompt: this.promptView(),
       privacy: {
         heuristics: HEURISTIC_RULES,
-        consentTimeoutSeconds: Math.round(CONSENT_TIMEOUT_MS / 1000),
+        consentTimeoutSeconds: Math.round(this.settings.consentTimeoutMs / 1000),
+        sourceRules: [...this.state.sourceRules].map(([sourceApp, action]) => ({
+          sourceApp,
+          action
+        })),
+        limits: {
+          defaultSpoolClips: DEFAULT_SPOOL_CLIP_CAP,
+          savedSpoolClips: SAVED_SPOOL_CLIP_CAP,
+          savedSpools: SAVED_SPOOL_CAP,
+          clipBytes: CLIP_BYTE_CAP,
+          storeBytes: STORE_BYTE_BUDGET
+        },
         dataFilePath: this.storage.path
       }
     }
@@ -493,7 +584,7 @@ export class Session {
       headline,
       detail,
       sourceApp: this.pending.sourceApp,
-      timeoutSeconds: Math.round(CONSENT_TIMEOUT_MS / 1000)
+      timeoutSeconds: Math.round(this.settings.consentTimeoutMs / 1000)
     }
   }
 
@@ -509,7 +600,7 @@ export class Session {
       this.pendingTimer = setTimeout(() => {
         // When nobody is at the keyboard, the safe default is not to write.
         this.answerConsent('skip')
-      }, CONSENT_TIMEOUT_MS)
+      }, this.settings.consentTimeoutMs)
     }
 
     // A notice stands until the next successful capture replaces it, so a decline the user did not
@@ -574,4 +665,10 @@ export class Session {
 function cleanName(name: string): string {
   const trimmed = name.trim()
   return trimmed.length === 0 ? 'New spool' : trimmed
+}
+
+/** Apply one spool's retention limit, returning the same object when nothing aged out. */
+function expireOne(spool: Spool, now: Date): Spool {
+  const { spool: aged, expired } = expireClips(spool, spool.retentionHours, now)
+  return expired.length === 0 ? spool : aged
 }

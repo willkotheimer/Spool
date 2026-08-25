@@ -79,8 +79,42 @@ export function loadOrCreateKey(keyPath: string, sealer: Sealer): KeyResult {
  * The only honest response to a key that cannot be opened: without it the existing database is
  * unreadable by anyone, this app included, so the choice is a fresh store or none. Destructive by
  * definition, which is why it happens only when the user asks for it (invariant 7).
+ *
+ * **Nothing here reads anything.** No open, no parse, no query — the files are removed blind, and
+ * so are SQLite's sidecar files, which would otherwise survive to confuse the next launch. A reset
+ * that needs a working database in order to clear a broken one is not a failsafe, and this is the
+ * one command that has to work when everything else has failed (PLAN.md 11, M9).
  */
-export function discardStore(keyPath: string, databasePath: string): void {
-  rmSync(keyPath, { force: true })
-  rmSync(databasePath, { force: true })
+export function discardStore(
+  keyPath: string,
+  databasePath: string,
+  extraPaths: readonly string[] = []
+): { readonly removed: string[]; readonly failed: Array<{ path: string; reason: string }> } {
+  const targets = [
+    keyPath,
+    databasePath,
+    // Write-ahead log and shared-memory files, which WAL mode leaves beside the database.
+    `${databasePath}-wal`,
+    `${databasePath}-shm`,
+    `${databasePath}-journal`,
+    ...extraPaths
+  ]
+
+  const removed: string[] = []
+  const failed: Array<{ path: string; reason: string }> = []
+
+  for (const target of targets) {
+    const wasThere = existsSync(target)
+    try {
+      rmSync(target, { force: true, recursive: false })
+      if (wasThere) removed.push(target)
+    } catch (error) {
+      // Keep going — one file refusing to go must not leave the rest behind — but **report it**.
+      // On Windows a file with an open handle cannot be deleted, and a failsafe that quietly
+      // leaves the data in place is worse than one that fails loudly.
+      failed.push({ path: target, reason: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  return { removed, failed }
 }

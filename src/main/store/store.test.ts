@@ -5,9 +5,9 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createClip } from '../core/clip'
 import { createSpool } from '../core/spool'
-import { migrate, openDatabase, schemaVersion } from './database'
+import { migrate, openDatabase, schemaVersion, type SpoolDatabase } from './database'
 import { discardStore, loadOrCreateKey, type Sealer } from './key'
-import { CURRENT_SCHEMA_VERSION, pendingMigrations } from './migrations'
+import { CURRENT_SCHEMA_VERSION, MIGRATIONS, pendingMigrations } from './migrations'
 import {
   deleteSpool,
   loadSourceRules,
@@ -15,7 +15,7 @@ import {
   saveSourceRules,
   saveSpool
 } from './repository'
-import { explainStorageFailure } from './index'
+import { explainStorageFailure, resetEverything } from './index'
 
 let directory: string
 const paths = () => ({
@@ -156,10 +156,10 @@ describe('migrations (PLAN.md 7)', () => {
     return result
   }
 
-  it('creates the schema at version 1 on a new file', () => {
+  it('creates the whole schema on a new file, one version at a time', () => {
     const { database, migrated } = open()
 
-    expect(migrated).toEqual([1])
+    expect(migrated).toEqual(MIGRATIONS.map((migration) => migration.version))
     expect(schemaVersion(database)).toBe(CURRENT_SCHEMA_VERSION)
     database.close()
   })
@@ -195,8 +195,32 @@ describe('migrations (PLAN.md 7)', () => {
   })
 
   it('knows what is still pending from any version', () => {
-    expect(pendingMigrations(0).map((m) => m.version)).toEqual([1])
+    expect(pendingMigrations(0).map((m) => m.version)).toEqual(
+      MIGRATIONS.map((migration) => migration.version)
+    )
+    expect(pendingMigrations(1).map((m) => m.version)).toEqual([2])
     expect(pendingMigrations(CURRENT_SCHEMA_VERSION)).toEqual([])
+  })
+
+  it('upgrades a file written by an earlier version, keeping what was in it', () => {
+    // Build a genuine v1 file: the v1 migration only, and meta saying so.
+    const first = open()
+    first.database.prepare('DELETE FROM spools').run()
+    first.database.exec('ALTER TABLE spools DROP COLUMN retention_hours')
+    first.database.prepare('UPDATE meta SET schema_version = 1').run()
+    saveSpoolV1(first.database, 'kept', 'Kept from v1')
+    first.database.close()
+
+    const upgraded = open()
+    expect(upgraded.migrated).toEqual([2])
+    expect(schemaVersion(upgraded.database)).toBe(CURRENT_SCHEMA_VERSION)
+
+    const [spool] = loadSpools(upgraded.database)
+    upgraded.database.close()
+
+    expect(spool.name).toBe('Kept from v1')
+    // A spool that predates retention has no limit, which is the default anyway.
+    expect(spool.retentionHours).toBeNull()
   })
 })
 
@@ -469,5 +493,100 @@ describe('managing spools (PLAN.md 11, M8)', () => {
     expect(restored.name).toBe('S')
     expect(restored.clips).toEqual([])
     expect(restored.cursorClipId).toBeNull()
+  })
+})
+
+/** Insert a spool the way schema v1 would have, without the column v2 adds. */
+function saveSpoolV1(database: SpoolDatabase, id: string, name: string): void {
+  database
+    .prepare(
+      `INSERT INTO spools (id, name, mode, cursor_clip_id, is_default, created_at, updated_at)
+       VALUES (?, ?, 'fifo', NULL, 0, ?, ?)`
+    )
+    .run(id, name, NOW, NOW)
+}
+
+describe('the reset failsafe (PLAN.md 11, M9)', () => {
+  it('leaves no data, no key, and no preferences behind', () => {
+    const { database, key } = paths()
+    const settings = join(directory, 'settings.json')
+
+    const loaded = loadOrCreateKey(key, fakeSealer())
+    if (!loaded.ok) throw new Error(loaded.detail)
+    const opened = openDatabase(database, loaded.key)
+    if (!opened.ok) throw new Error(opened.detail)
+    saveSpool(
+      opened.database,
+      { ...createSpool({ id: 's', name: 'S', kind: 'default' }), clips: [clip('a')] },
+      NOW
+    )
+    opened.database.close()
+    writeFileSync(settings, '{"separator":"tab"}')
+
+    resetEverything(paths(), [settings])
+
+    expect(existsSync(database)).toBe(false)
+    expect(existsSync(key)).toBe(false)
+    expect(existsSync(settings)).toBe(false)
+  })
+
+  it('succeeds against a deliberately truncated database, without reading it', () => {
+    const { database, key } = paths()
+    const loaded = loadOrCreateKey(key, fakeSealer())
+    if (!loaded.ok) throw new Error(loaded.detail)
+    const opened = openDatabase(database, loaded.key)
+    if (!opened.ok) throw new Error(opened.detail)
+    opened.database.close()
+
+    // Cut the file in half: unreadable by any library, this one included.
+    const whole = readFileSync(database)
+    writeFileSync(database, whole.subarray(0, Math.floor(whole.length / 2)))
+    const probe = new Database(database)
+    expect(() => probe.prepare('SELECT 1 FROM clips').get()).toThrow()
+    probe.close()
+
+    const result = resetEverything(paths())
+
+    expect(result.failed).toEqual([])
+    expect(existsSync(database)).toBe(false)
+    expect(existsSync(key)).toBe(false)
+  })
+
+  it('takes the write-ahead log and shared-memory files with it', () => {
+    const { database, key } = paths()
+    writeFileSync(database, 'x')
+    writeFileSync(`${database}-wal`, 'x')
+    writeFileSync(`${database}-shm`, 'x')
+
+    resetEverything(paths())
+
+    expect(existsSync(`${database}-wal`)).toBe(false)
+    expect(existsSync(`${database}-shm`)).toBe(false)
+    expect(existsSync(key)).toBe(false)
+  })
+
+  it('does not mind being run when there is nothing to remove', () => {
+    expect(resetEverything(paths()).failed).toEqual([])
+    expect(resetEverything(paths()).failed).toEqual([])
+  })
+
+  it('reports a file it could not remove rather than claiming success', () => {
+    const { database } = paths()
+    const loaded = loadOrCreateKey(paths().key, fakeSealer())
+    if (!loaded.ok) throw new Error(loaded.detail)
+    const opened = openDatabase(database, loaded.key)
+    if (!opened.ok) throw new Error(opened.detail)
+
+    // Left open on purpose: Windows will not delete a file that is still in use, and the failsafe
+    // has to say so rather than leave the user believing their clips are gone.
+    const result = resetEverything(paths())
+    opened.database.close()
+
+    if (process.platform === 'win32') {
+      expect(result.failed.map((f) => f.path)).toContain(database)
+      expect(existsSync(database)).toBe(true)
+    } else {
+      expect(result.failed).toEqual([])
+    }
   })
 })

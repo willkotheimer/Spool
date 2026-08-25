@@ -508,7 +508,8 @@ describe('persistence (PLAN.md 11, M6)', () => {
         createClip({ id: 'a', content: 'first', capturedAt: '2026-08-22T17:00:00.000Z' }),
         createClip({ id: 'b', content: 'second', capturedAt: '2026-08-22T17:00:01.000Z' })
       ],
-      cursorClipId: 'b'
+      cursorClipId: 'b',
+      retentionHours: null
     }
 
     const { session } = started()

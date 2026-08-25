@@ -65,6 +65,9 @@ export interface PrivacyFacts {
   readonly consentTimeoutSeconds: number
   /** Where the encrypted store lives, or null while there is not one yet (M6). */
   readonly dataFilePath: string | null
+  /** Every standing answer, so each can be revoked (PLAN.md 11, M9). */
+  readonly sourceRules: readonly SourceRuleView[]
+  readonly limits: LimitsView
 }
 
 /** Whether anything is being stored, and what to do when it is not (PLAN.md 11, M6). */
@@ -85,6 +88,21 @@ export type SeparatorKind = 'newline' | 'blank_line' | 'tab' | 'comma' | 'space'
 export type WindowStateName = 'compact' | 'expanded'
 
 /** Enough of a spool to list it. Choosing which one captures is M8. */
+/** A standing per-application answer, listed so it can be revoked (PLAN.md 11, M9). */
+export interface SourceRuleView {
+  readonly sourceApp: string
+  readonly action: 'always_keep' | 'always_skip'
+}
+
+/** The caps of PLAN.md 3, shown read-only so the user knows what they are. */
+export interface LimitsView {
+  readonly defaultSpoolClips: number
+  readonly savedSpoolClips: number
+  readonly savedSpools: number
+  readonly clipBytes: number
+  readonly storeBytes: number
+}
+
 export interface SpoolSummary {
   readonly id: string
   readonly name: string
@@ -93,6 +111,8 @@ export interface SpoolSummary {
   readonly isActive: boolean
   /** The default spool can be cleared but never deleted — something has to catch a copy. */
   readonly isDefault: boolean
+  /** How long clips live here, in hours, or null to keep them until removed (PLAN.md 11, M9). */
+  readonly retentionHours: number | null
 }
 
 /** A joined result waiting on a yes, because it is large enough to be felt system-wide. */
@@ -133,6 +153,10 @@ export const CHANNELS = {
   renameSpool: 'spool:rename-spool',
   deleteSpool: 'spool:delete-spool',
   setActiveSpool: 'spool:set-active-spool',
+  setRetention: 'spool:set-retention',
+  revokeSourceRule: 'spool:revoke-source-rule',
+  setConsentTimeout: 'spool:set-consent-timeout',
+  resetEverything: 'spool:reset-everything',
   deleteClip: 'spool:delete-clip',
   clearSpool: 'spool:clear-spool'
 } as const

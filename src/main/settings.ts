@@ -23,12 +23,15 @@ export interface Settings {
    * belongs with the preferences: a stale id simply falls back to the default spool.
    */
   readonly activeSpoolId: string | null
+  /** How long a consent prompt waits before answering itself with Skip (PLAN.md 4). */
+  readonly consentTimeoutSeconds: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   separator: DEFAULT_SEPARATOR,
   window: 'compact',
-  activeSpoolId: null
+  activeSpoolId: null,
+  consentTimeoutSeconds: 30
 }
 
 export function settingsPath(userDataDirectory: string): string {
@@ -64,7 +67,13 @@ export function loadSettings(path: string): Settings {
       ? (raw.separator as SeparatorKind)
       : DEFAULT_SETTINGS.separator,
     window: raw.window === 'expanded' ? 'expanded' : 'compact',
-    activeSpoolId: typeof raw.activeSpoolId === 'string' ? raw.activeSpoolId : null
+    activeSpoolId: typeof raw.activeSpoolId === 'string' ? raw.activeSpoolId : null,
+    consentTimeoutSeconds:
+      typeof raw.consentTimeoutSeconds === 'number' &&
+      raw.consentTimeoutSeconds >= 5 &&
+      raw.consentTimeoutSeconds <= 600
+        ? Math.round(raw.consentTimeoutSeconds)
+        : DEFAULT_SETTINGS.consentTimeoutSeconds
   }
 }
 

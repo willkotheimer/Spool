@@ -18,6 +18,7 @@ export function createSpool(input: {
   kind: SpoolKind
   mode?: Mode
   clips?: readonly Clip[]
+  retentionHours?: number | null
 }): Spool {
   const clips = input.clips ?? []
   const mode = input.mode ?? 'fifo'
@@ -27,7 +28,8 @@ export function createSpool(input: {
     kind: input.kind,
     mode,
     clips,
-    cursorClipId: clips.length === 0 ? null : startingClip(clips, mode).id
+    cursorClipId: clips.length === 0 ? null : startingClip(clips, mode).id,
+    retentionHours: input.retentionHours ?? null
   }
 }
 

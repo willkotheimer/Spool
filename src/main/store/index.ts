@@ -99,6 +99,21 @@ export function startFresh(paths: StorePaths, sealer: Sealer): StoreResult {
 }
 
 /**
+ * **Reset everything** — the failsafe (PLAN.md 11, M9).
+ *
+ * Removes the database, its sidecar files, the sealed key, and the preferences, without reading
+ * any of them. The caller closes the open handle first, because Windows will not delete a file
+ * that is still open; everything after that is blind deletion, so a corrupt or truncated database
+ * is cleared exactly as easily as a healthy one.
+ */
+export function resetEverything(
+  paths: StorePaths,
+  extraPaths: readonly string[] = []
+): { readonly removed: string[]; readonly failed: Array<{ path: string; reason: string }> } {
+  return discardStore(paths.key, paths.database, extraPaths)
+}
+
+/**
  * Why nothing is being stored, in words meant for the person reading them rather than the code
  * that produced them. "key_unreadable" is a reason; it is not an explanation (PLAN.md 11, M6).
  */
