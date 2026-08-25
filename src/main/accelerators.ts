@@ -8,7 +8,7 @@
  */
 export type Platform = 'win32' | 'darwin' | 'linux'
 
-export type Action = 'summon' | 'serve' | 'toggleMode'
+export type Action = 'summon' | 'serve' | 'pasteAll' | 'toggleMode'
 
 const WINDOWS_MODIFIER = 'Super+Alt'
 const MAC_MODIFIER = 'Control+Alt'
@@ -16,16 +16,18 @@ const MAC_MODIFIER = 'Control+Alt'
 const KEYS: Record<Action, readonly string[]> = {
   summon: ['V', 'C'],
   serve: ['N'],
+  pasteAll: ['A'],
   toggleMode: ['M']
 }
 
 /** Every action, in the order the tray lists them. */
-export const ACTIONS: readonly Action[] = ['summon', 'serve', 'toggleMode']
+export const ACTIONS: readonly Action[] = ['summon', 'serve', 'pasteAll', 'toggleMode']
 
 /** What each action is called where a person reads it. */
 export const ACTION_LABELS: Record<Action, string> = {
   summon: 'Summon',
   serve: 'Serve next clip',
+  pasteAll: 'Paste the whole spool',
   toggleMode: 'Toggle FIFO / LIFO'
 }
 

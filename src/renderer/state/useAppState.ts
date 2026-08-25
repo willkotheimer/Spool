@@ -13,7 +13,10 @@ const initialState: AppState = {
   capture: { available: false, reason: null },
   prompt: null,
   privacy: { heuristics: [], consentTimeoutSeconds: 30, dataFilePath: null },
-  storage: { available: false, reason: null, canStartFresh: false, path: null }
+  storage: { available: false, reason: null, canStartFresh: false, path: null },
+  separator: 'newline',
+  spools: [],
+  pendingJoin: null
 }
 
 function reducer(_current: AppState, action: Action): AppState {

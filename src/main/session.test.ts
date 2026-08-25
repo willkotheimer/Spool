@@ -564,3 +564,182 @@ describe('persistence (PLAN.md 11, M6)', () => {
     expect(session.getState().storage.available).toBe(false)
   })
 })
+
+describe('pasting the whole spool (PLAN.md 3)', () => {
+  const fill = (watcher: ReturnType<typeof fakeWatcher>, values: string[]) => {
+    for (const value of values) watcher.change(text(value))
+  }
+
+  it('lands five clips as five separated lines in one write', () => {
+    const { session, watcher, written } = started()
+    fill(watcher, ['one', 'two', 'three', 'four', 'five'])
+
+    session.pasteWholeSpool()
+
+    expect(written).toEqual(['one\ntwo\nthree\nfour\nfive'])
+  })
+
+  it('reverses the emitted order in lifo', () => {
+    const { session, watcher, written } = started()
+    session.toggleMode()
+    fill(watcher, ['one', 'two', 'three'])
+
+    session.pasteWholeSpool()
+
+    expect(written).toEqual(['three\ntwo\none'])
+  })
+
+  it('starts at the beginning regardless of the cursor, and leaves the cursor alone', () => {
+    const { session, watcher, written } = started()
+    fill(watcher, ['one', 'two', 'three'])
+    session.serveNext()
+    const cursorAfterServe = session.getState().spool.cursorClipId
+
+    session.pasteWholeSpool()
+
+    expect(written.at(-1)).toBe('one\ntwo\nthree')
+    expect(session.getState().spool.cursorClipId).toBe(cursorAfterServe)
+  })
+
+  it('joins with the chosen separator', () => {
+    const { session, watcher, written } = started()
+    fill(watcher, ['a', 'b', 'c'])
+
+    session.setSeparator('tab')
+    session.pasteWholeSpool()
+
+    expect(written.at(-1)).toBe('a\tb\tc')
+  })
+
+  it('does not add a clip, however many times it is run', () => {
+    const { session, watcher, written } = started()
+    fill(watcher, ['one', 'two', 'three'])
+
+    for (let i = 0; i < 10; i++) {
+      session.pasteWholeSpool()
+      // The joined text comes back through the watcher, exactly as the OS would deliver it.
+      watcher.change(text(written[written.length - 1]))
+    }
+
+    expect(session.getState().spool.count).toBe(3)
+  })
+
+  it('says nothing to paste on an empty spool', () => {
+    const { session, written } = started()
+
+    session.pasteWholeSpool()
+
+    expect(written).toEqual([])
+    expect(session.getState().notice?.message).toMatch(/nothing to paste/i)
+  })
+
+  it('asks first when the result is large enough to be felt system-wide', () => {
+    const { session, watcher, written } = started()
+    // Eleven clips just under the 1 MiB per-clip cap: each is admissible on its own, and the
+    // joined result is over the 10 MiB the clipboard is worth confirming for.
+    for (let i = 0; i < 11; i++) {
+      watcher.change(text(String.fromCharCode(97 + i).repeat(1024 * 1024 - 1)))
+    }
+    expect(session.getState().spool.count).toBe(11)
+
+    session.pasteWholeSpool()
+
+    expect(written).toEqual([])
+    expect(session.getState().pendingJoin?.clips).toBe(11)
+
+    session.pasteWholeSpool(true)
+    expect(written).toHaveLength(1)
+    expect(session.getState().pendingJoin).toBeNull()
+  })
+
+  it('lets the confirmation be declined without writing anything', () => {
+    const { session, watcher, written } = started()
+    for (let i = 0; i < 11; i++) {
+      watcher.change(text(String.fromCharCode(97 + i).repeat(1024 * 1024 - 1)))
+    }
+
+    session.pasteWholeSpool()
+    session.cancelWholeSpoolPaste()
+
+    expect(written).toEqual([])
+    expect(session.getState().pendingJoin).toBeNull()
+  })
+})
+
+describe('arranging (PLAN.md 11, M7)', () => {
+  it('applies an arrangement to the active spool', () => {
+    const { session, watcher } = started()
+    for (const value of ['a', 'b', 'c']) watcher.change(text(value))
+    const ids = session.getState().spool.clips.map((clip) => clip.id)
+
+    session.saveArrangement([ids[2], ids[0], ids[1]])
+
+    expect(session.getState().spool.clips.map((clip) => clip.preview)).toEqual(['c', 'a', 'b'])
+  })
+
+  it('leaves the cursor on the clip it pointed at before the drag', () => {
+    const { session, watcher } = started()
+    for (const value of ['a', 'b', 'c']) watcher.change(text(value))
+    const ids = session.getState().spool.clips.map((clip) => clip.id)
+    const before = session.getState().spool.cursorClipId
+
+    session.saveArrangement([ids[2], ids[1], ids[0]])
+
+    expect(session.getState().spool.cursorClipId).toBe(before)
+    // Its index moved; its identity did not.
+    expect(session.getState().spool.clips[2].id).toBe(before)
+  })
+
+  it('ignores an arrangement that is not exactly the clips there are', () => {
+    const { session, watcher } = started()
+    for (const value of ['a', 'b']) watcher.change(text(value))
+    const ids = session.getState().spool.clips.map((clip) => clip.id)
+
+    session.saveArrangement([ids[0]])
+    session.saveArrangement([ids[0], ids[1], 'invented'])
+
+    expect(session.getState().spool.clips.map((clip) => clip.preview)).toEqual(['a', 'b'])
+  })
+
+  it('keeps an arrangement as a new spool, leaving the original untouched', () => {
+    const { session, watcher } = started()
+    const { store, saved } = (() => {
+      const spools: Spool[] = []
+      return {
+        saved: spools,
+        store: {
+          path: 'x',
+          saveSpool: (spool: Spool) => spools.push(spool),
+          saveSourceRules: () => {},
+          loadSpools: () => [],
+          loadSourceRules: () => new Map<string, SourceAction>(),
+          close: () => {}
+        }
+      }
+    })()
+    session.attachStore(store)
+    for (const value of ['a', 'b', 'c']) watcher.change(text(value))
+    const ids = session.getState().spool.clips.map((clip) => clip.id)
+
+    session.createSpoolFromArrangement('Reversed', [ids[2], ids[1], ids[0]])
+
+    // The original keeps its order.
+    expect(session.getState().spool.clips.map((clip) => clip.preview)).toEqual(['a', 'b', 'c'])
+
+    // And the new one exists, with the arrangement.
+    const created = saved.find((spool) => spool.name === 'Reversed')
+    expect(created?.clips.map((clip) => clip.preview)).toEqual(['c', 'b', 'a'])
+    expect(created?.kind).toBe('saved')
+    expect(session.getState().spools.map((s) => s.name)).toContain('Reversed')
+  })
+
+  it('gives a nameless new spool a name rather than an empty one', () => {
+    const { session, watcher } = started()
+    for (const value of ['a']) watcher.change(text(value))
+    const ids = session.getState().spool.clips.map((clip) => clip.id)
+
+    session.createSpoolFromArrangement('   ', ids)
+
+    expect(session.getState().spools.map((s) => s.name)).toContain('New spool')
+  })
+})

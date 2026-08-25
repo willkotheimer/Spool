@@ -349,3 +349,31 @@ describe('explaining a storage failure (PLAN.md 11, M6)', () => {
     expect(explained.canStartFresh).toBe(false)
   })
 })
+
+describe('positions on disk (PLAN.md 11, M7)', () => {
+  it('stay dense and 0-based through arrangement after arrangement', () => {
+    const result = openDatabase(paths().database, 'e'.repeat(64))
+    if (!result.ok) throw new Error(result.detail)
+    const database = result.database
+
+    const clips = ['a', 'b', 'c', 'd', 'e'].map((id) => clip(id))
+    const spool = {
+      ...createSpool({ id: 'default', name: 'Default', kind: 'default' }),
+      clips,
+      cursorClipId: 'c'
+    }
+    saveSpool(database, spool, NOW)
+
+    // Rearranged several times, as dragging would.
+    saveSpool(database, { ...spool, clips: [...clips].reverse() }, NOW)
+    saveSpool(database, { ...spool, clips: [clips[2], clips[0], clips[4], clips[1], clips[3]] }, NOW)
+
+    const rows = database
+      .prepare('SELECT position, id FROM clips WHERE spool_id = ? ORDER BY position')
+      .all('default') as Array<{ position: number; id: string }>
+    database.close()
+
+    expect(rows.map((row) => row.position)).toEqual([0, 1, 2, 3, 4])
+    expect(rows.map((row) => row.id)).toEqual(['c', 'a', 'e', 'b', 'd'])
+  })
+})

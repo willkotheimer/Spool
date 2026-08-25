@@ -43,8 +43,8 @@ nested directory fails on Windows' 260-character path limit.
 
 ## Status
 
-M6 — persistence: clips, cursor, mode, and standing answers survive a restart, in a SQLCipher
-database whose key is generated on first run and sealed by Windows itself. Nothing is written in
-plaintext, and a key that cannot be opened is explained rather than swallowed. Underneath are M5's
-consent prompts, M4's serve, M3's capture, M2's spool core, M1's zero-network gate, and M0's tray
-icon and summon hotkey.
+M7 — arrange and paste the whole spool: an expanded window with a draggable, keyboard-reorderable
+clip list; save an arrangement to the spool or keep it as a new one; and `Win+Alt+A` puts every clip
+on the clipboard at once, joined by the separator you chose, for a single Ctrl+V. Underneath are M6's
+encrypted store, M5's consent prompts, M4's serve, M3's capture, M2's spool core, M1's zero-network
+gate, and M0's tray icon and summon hotkey. Switching between spools arrives at M8.

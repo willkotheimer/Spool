@@ -135,6 +135,12 @@ The separator is deliberately a global setting rather than a per-spool column: i
 schema version nor a migration, and a per-paste override in the button covers the case where one
 spool differs.
 
+**Where it lives, decided at M7:** a small `settings.json` beside the database, not a table inside
+it. The §7 schema's versions are already spoken for — `last_used_at` at M10, `is_starred` at M11 —
+and a separator is a preference rather than user data: it is not sensitive, and it has to be
+readable *before* the encrypted store opens, so that a store which fails to open still leaves a
+usable window behind. A file edited into nonsense costs the user their preferences, not their app.
+
 ### Limits
 
 Every spool is bounded. These are compile-time constants in `core/`, shown read-only in settings
@@ -1165,8 +1171,9 @@ Things that look like improvements and would damage the design.
 
 Three remain. The first two are cheap now and a refactor later; the third is deliberately deferred.
 
-1. **"Create reorder."** Read here as: save the current arrangement as a *new* named spool,
-   leaving the original untouched. Confirm this rather than "start a new empty spool."
+1. ~~**"Create reorder."**~~ **Settled at M7:** it saves the current arrangement as a *new* named
+   spool, leaving the original untouched — "keep what you have, and keep this arrangement of it
+   too." Not "start a new empty spool."
 2. **Linux.** Electron runs there, but the concealed-clipboard markers of §4 have no portable
    equivalent, and X11 versus Wayland clipboard access differs substantially. Deferred, not refused.
 3. **Opt-in serve-and-paste.** The two-step of §8 is the v1 default and needs no permissions. A single

@@ -34,6 +34,26 @@ export function clipRows(spool: SpoolView, limit = 5): ClipRow[] {
   return rows.slice(start, start + limit)
 }
 
+/**
+ * How many clips fall outside the window of rows on show.
+ *
+ * The compact window keeps the next-to-serve clip in view, which means clips can sit above or below
+ * the visible rows with nothing to say so — and a spool whose state is only partly legible is the
+ * thing invariant 6 is against. Counting them lets the window admit what it is not showing.
+ */
+export function hiddenCounts(
+  spool: SpoolView,
+  limit = 5
+): { readonly above: number; readonly below: number } {
+  const shown = clipRows(spool, limit)
+  if (shown.length === 0 || shown.length === spool.clips.length) return { above: 0, below: 0 }
+
+  const firstShown = spool.clips.findIndex((clip) => clip.id === shown[0].clip.id)
+  const above = Math.max(firstShown, 0)
+
+  return { above, below: spool.clips.length - above - shown.length }
+}
+
 /** How full the spool is, in the words the compact window uses. */
 export function capacityLabel(spool: SpoolView): string {
   return `${spool.count} of ${spool.cap}`

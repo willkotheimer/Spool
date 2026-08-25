@@ -46,6 +46,9 @@ function messageFor(category: NoticeCategory, bytes: number, limit: number): str
       return "That kind of copy isn't captured in this version"
     case 'nothing_to_paste':
       return NOTHING_TO_PASTE.message
+    case 'pasted_spool':
+      // Written by the session, which knows how many clips went out (PLAN.md 3).
+      return ''
     case 'size':
       // Deliberately shaped unlike the format notices: nothing about this copy was the wrong
       // kind of thing, it was only too big (PLAN.md 4).

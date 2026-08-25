@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ClipView, SpoolView } from '../../shared/ipc'
-import { capacityLabel, clipRows, sourceLabel } from './ClipListHelper'
+import { capacityLabel, clipRows, hiddenCounts, sourceLabel } from './ClipListHelper'
 
 const clip = (id: string, sourceApp: string | null = null): ClipView => ({
   id,
@@ -71,5 +71,37 @@ describe('sourceLabel', () => {
 
   it('says nothing when the OS did not', () => {
     expect(sourceLabel(clip('a', null))).toBeNull()
+  })
+})
+
+describe('hiddenCounts', () => {
+  it('has nothing to admit when every clip is on show', () => {
+    expect(hiddenCounts(spool(['a', 'b', 'c'], 'a'))).toEqual({ above: 0, below: 0 })
+  })
+
+  it('counts what sits below when the window starts at the top', () => {
+    const ids = Array.from({ length: 9 }, (_, i) => `c${i}`)
+
+    expect(hiddenCounts(spool(ids, 'c0'), 5)).toEqual({ above: 0, below: 4 })
+  })
+
+  it('counts both sides when the next clip is in the middle', () => {
+    const ids = Array.from({ length: 9 }, (_, i) => `c${i}`)
+
+    expect(hiddenCounts(spool(ids, 'c5'), 5)).toEqual({ above: 4, below: 0 })
+    expect(hiddenCounts(spool(ids, 'c3'), 5)).toEqual({ above: 2, below: 2 })
+  })
+
+  it('adds up to every clip that is not on show', () => {
+    const ids = Array.from({ length: 20 }, (_, i) => `c${i}`)
+
+    for (const cursor of ids) {
+      const { above, below } = hiddenCounts(spool(ids, cursor), 5)
+      expect(above + below).toBe(15)
+    }
+  })
+
+  it('says nothing about an empty spool', () => {
+    expect(hiddenCounts(spool([], null))).toEqual({ above: 0, below: 0 })
   })
 })

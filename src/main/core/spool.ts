@@ -148,6 +148,30 @@ export function reorder(spool: Spool, from: number, to: number): Spool {
   return { ...spool, clips }
 }
 
+/**
+ * Put the clips in the order given by `clipIds`.
+ *
+ * Rejects an arrangement that is not a permutation of exactly the clips there are — a dropped or
+ * invented id would silently lose or duplicate a clip, and the renderer is not the authority on
+ * what is in the spool. Returns null rather than throwing, because a stale arrangement arriving
+ * from a window is a race, not a bug.
+ */
+export function arrange(clips: readonly Clip[], clipIds: readonly string[]): Clip[] | null {
+  if (clipIds.length !== clips.length) return null
+
+  const byId = new Map(clips.map((clip) => [clip.id, clip]))
+  const rearranged: Clip[] = []
+
+  for (const id of clipIds) {
+    const clip = byId.get(id)
+    if (clip === undefined) return null
+    byId.delete(id)
+    rearranged.push(clip)
+  }
+
+  return rearranged
+}
+
 /** Change direction. The cursor stays on the clip it was on; only future travel changes. */
 export function setMode(spool: Spool, mode: Mode): Spool {
   return { ...spool, mode }
