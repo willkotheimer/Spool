@@ -471,6 +471,19 @@ scripts/
 | Packaging | `electron-builder` |
 | Tests | Vitest for `core/`, `detect/`, and helpers; `fast-check` for the M2 property test; Playwright's `_electron` for e2e |
 
+**Two measurements worth keeping, from M9.** Both were found by benchmarking rather than reasoning,
+and both were invisible until something was timed:
+
+- **Never call `expect()` inside a property-test loop.** A matcher costs far more than the assertion
+  it wraps, and the M2 property runs its invariants after every operation — roughly a hundred
+  thousand times. Replacing them with plain `if (…) throw new Error(…)` took those tests from 5.6
+  seconds to 0.27, with identical coverage; `fast-check` prefers a thrown error anyway, because it
+  shrinks the failing sequence and reports the message. A test that is slow enough to need a raised
+  timeout is usually telling you something, and the timeout is the wrong place to answer it.
+- **`Buffer.byteLength(s, 'utf8')`, not `new TextEncoder().encode(s).length`**, when only the size
+  is wanted: 10 ms against 265 ms per two hundred thousand calls, and no allocation rather than a
+  complete copy of the string. On the capture path that copy is up to a megabyte per clip.
+
 **The native-module tax.** `better-sqlite3-multiple-ciphers` and the clipboard addon are compiled
 against Electron's ABI, so both need `electron-rebuild` and both break on every Electron major
 version bump. Budget for it: this is the cost Electron charges in place of the one Rust would have.
