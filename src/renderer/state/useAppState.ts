@@ -12,7 +12,19 @@ const initialState: AppState = {
   notice: null,
   capture: { available: false, reason: null },
   prompt: null,
-  privacy: { heuristics: [], consentTimeoutSeconds: 30, dataFilePath: null },
+  privacy: {
+    heuristics: [],
+    consentTimeoutSeconds: 30,
+    dataFilePath: null,
+    sourceRules: [],
+    limits: {
+      defaultSpoolClips: 50,
+      savedSpoolClips: 100,
+      savedSpools: 50,
+      clipBytes: 1024 * 1024,
+      storeBytes: 512 * 1024 * 1024
+    }
+  },
   storage: { available: false, reason: null, canStartFresh: false, path: null },
   separator: 'newline',
   spools: [],

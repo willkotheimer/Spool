@@ -35,6 +35,11 @@ export interface Spool {
   readonly mode: Mode
   readonly clips: readonly Clip[]
   readonly cursorClipId: string | null
+  /**
+   * How long clips live on this spool, in hours, or null to keep them until the user removes them
+   * (PLAN.md 11, M9). Null is the default and stays the default.
+   */
+  readonly retentionHours: number | null
 }
 
 /** Why a capture did not happen. Every one of these is something the user is told (PLAN.md 3). */

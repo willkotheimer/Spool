@@ -17,6 +17,7 @@ interface SpoolRow {
   mode: Mode
   cursor_clip_id: string | null
   is_default: number
+  retention_hours: number | null
 }
 
 interface ClipRow {
@@ -31,7 +32,9 @@ interface ClipRow {
 
 export function loadSpools(database: SpoolDatabase): Spool[] {
   const spools = database
-    .prepare('SELECT id, name, mode, cursor_clip_id, is_default FROM spools ORDER BY created_at')
+    .prepare(
+      'SELECT id, name, mode, cursor_clip_id, is_default, retention_hours FROM spools ORDER BY created_at'
+    )
     .all() as SpoolRow[]
 
   const clipsFor = database.prepare(
@@ -65,7 +68,8 @@ export function loadSpools(database: SpoolDatabase): Spool[] {
       kind: (row.is_default === 1 ? 'default' : 'saved') as SpoolKind,
       mode: row.mode,
       clips,
-      cursorClipId
+      cursorClipId,
+      retentionHours: row.retention_hours
     }
   })
 }
@@ -73,12 +77,14 @@ export function loadSpools(database: SpoolDatabase): Spool[] {
 /** Write one spool and its clips. Positions are rewritten from the array, which is the order. */
 export function saveSpool(database: SpoolDatabase, spool: Spool, now: string): void {
   const upsertSpool = database.prepare(
-    `INSERT INTO spools (id, name, mode, cursor_clip_id, is_default, created_at, updated_at)
-     VALUES (@id, @name, @mode, @cursor_clip_id, @is_default, @now, @now)
+    `INSERT INTO spools
+       (id, name, mode, cursor_clip_id, is_default, retention_hours, created_at, updated_at)
+     VALUES (@id, @name, @mode, @cursor_clip_id, @is_default, @retention_hours, @now, @now)
      ON CONFLICT (id) DO UPDATE SET
        name = excluded.name,
        mode = excluded.mode,
        cursor_clip_id = excluded.cursor_clip_id,
+       retention_hours = excluded.retention_hours,
        updated_at = excluded.updated_at`
   )
   const deleteClips = database.prepare('DELETE FROM clips WHERE spool_id = ?')
@@ -95,6 +101,7 @@ export function saveSpool(database: SpoolDatabase, spool: Spool, now: string): v
       mode: spool.mode,
       cursor_clip_id: spool.cursorClipId,
       is_default: spool.kind === 'default' ? 1 : 0,
+      retention_hours: spool.retentionHours ?? null,
       now
     })
 

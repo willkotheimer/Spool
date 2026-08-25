@@ -543,9 +543,13 @@ Notes for the implementer:
   by `core/` and asserted by the M2 property test, not by SQLite. A `UNIQUE (spool_id, position)`
   constraint would collide with itself mid-reorder and force an offset-shuffle workaround, buying
   nothing that the property test does not already prove.
-- The schema evolves across three versions on purpose: **v1** at M6, **v2** adding `last_used_at` at
-  M10, **v3** adding `is_starred` at M11. The upgrade test in M13 therefore walks a real v1 → v3 path
-  rather than comparing identical schemas.
+- The schema evolves across several versions on purpose: **v1** at M6, **v2** adding
+  `retention_hours` at M9, **v3** adding `last_used_at` at M10, **v4** adding `is_starred` at M11.
+  The upgrade test in M13 therefore walks a real v1 → v4 path rather than comparing identical
+  schemas. **The numbering shifted at M9** — retention is per-spool data, so it belongs on the spool
+  rather than in the preferences file, and that made it the first migration after v1. The versions a
+  plan assigns in advance are a sketch; what matters is that every one of them is a forward
+  migration and that `meta` says which one a file is at.
 - **In memory, a spool is a `Vec<Clip>` plus a cursor clip id.** The vector is the order; the id
   is the position in it. Rewriting the whole run of positions for one spool inside a transaction
   is the reorder and delete strategy — with a cap of 100 clips (§3 Limits) that is at most 100

@@ -17,6 +17,8 @@ import type { Session } from '../session'
 export interface IpcActions {
   startFreshStore: () => void
   setWindowState: (state: WindowStateName) => void
+  /** The failsafe of PLAN.md 11, M9. Returns what it could not remove, if anything. */
+  resetEverything: () => { failed: Array<{ path: string; reason: string }> }
 }
 
 export function registerIpc(
@@ -61,6 +63,16 @@ export function registerIpc(
     session.setActiveSpool(spoolId)
   )
   ipcMain.handle(CHANNELS.deleteClip, (_event, clipId: string) => session.deleteClip(clipId))
+  ipcMain.handle(CHANNELS.setRetention, (_event, spoolId: string, hours: number | null) =>
+    session.setRetention(spoolId, hours)
+  )
+  ipcMain.handle(CHANNELS.revokeSourceRule, (_event, sourceApp: string) =>
+    session.revokeSourceRule(sourceApp)
+  )
+  ipcMain.handle(CHANNELS.setConsentTimeout, (_event, seconds: number) =>
+    session.setConsentTimeout(seconds)
+  )
+  ipcMain.handle(CHANNELS.resetEverything, () => actions.resetEverything())
   ipcMain.handle(CHANNELS.clearSpool, (_event, spoolId: string) => session.clearSpool(spoolId))
 
   const unsubscribe = session.onChange((state) => {
@@ -85,6 +97,10 @@ export function registerIpc(
     ipcMain.removeHandler(CHANNELS.deleteSpool)
     ipcMain.removeHandler(CHANNELS.setActiveSpool)
     ipcMain.removeHandler(CHANNELS.deleteClip)
+    ipcMain.removeHandler(CHANNELS.setRetention)
+    ipcMain.removeHandler(CHANNELS.revokeSourceRule)
+    ipcMain.removeHandler(CHANNELS.setConsentTimeout)
+    ipcMain.removeHandler(CHANNELS.resetEverything)
     ipcMain.removeHandler(CHANNELS.clearSpool)
     unsubscribe()
   }

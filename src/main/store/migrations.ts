@@ -64,10 +64,23 @@ CREATE TABLE source_rules (
  * collide with itself mid-reorder and buy nothing the property test does not already prove
  * (PLAN.md 7).
  */
+/**
+ * Retention is per-spool, so it belongs on the spool rather than in the preferences file: it is
+ * data about a spool, it has to travel with it, and a spool that is deleted must take its limit
+ * with it. That makes it a schema change — the first one after v1, which pushes `last_used_at` to
+ * v3 at M10 and `is_starred` to v4 at M11. Recorded in PLAN.md 7; the upgrade test at M13 walks
+ * whatever the real path turns out to be rather than a path decided in advance.
+ */
+const V2 = `ALTER TABLE spools ADD COLUMN retention_hours INTEGER;`
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
     up: (database) => database.exec(V1)
+  },
+  {
+    version: 2,
+    up: (database) => database.exec(V2)
   }
 ]
 

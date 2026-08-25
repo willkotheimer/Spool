@@ -21,13 +21,30 @@ describe('settings (PLAN.md 3, 8)', () => {
   })
 
   it('round-trips what the user chose', () => {
-    saveSettings(path(), { separator: 'tab', window: 'expanded', activeSpoolId: 'abc' })
+    saveSettings(path(), {
+      separator: 'tab',
+      window: 'expanded',
+      activeSpoolId: 'abc',
+      consentTimeoutSeconds: 45
+    })
 
     expect(loadSettings(path())).toEqual({
       separator: 'tab',
       window: 'expanded',
-      activeSpoolId: 'abc'
+      activeSpoolId: 'abc',
+      consentTimeoutSeconds: 45
     })
+  })
+
+  it('refuses a consent timeout outside the range a person could answer in', () => {
+    writeFileSync(path(), JSON.stringify({ consentTimeoutSeconds: 0 }))
+    expect(loadSettings(path()).consentTimeoutSeconds).toBe(30)
+
+    writeFileSync(path(), JSON.stringify({ consentTimeoutSeconds: 99999 }))
+    expect(loadSettings(path()).consentTimeoutSeconds).toBe(30)
+
+    writeFileSync(path(), JSON.stringify({ consentTimeoutSeconds: 60 }))
+    expect(loadSettings(path()).consentTimeoutSeconds).toBe(60)
   })
 
   it('falls back to defaults rather than failing on a file edited into nonsense', () => {
@@ -44,7 +61,8 @@ describe('settings (PLAN.md 3, 8)', () => {
     expect(loadSettings(path())).toEqual({
       separator: 'comma',
       window: 'compact',
-      activeSpoolId: null
+      activeSpoolId: null,
+      consentTimeoutSeconds: 30
     })
   })
 })

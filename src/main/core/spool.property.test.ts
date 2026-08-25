@@ -136,15 +136,23 @@ function runProperty(kind: SpoolKind): Reached {
   return reached
 }
 
+/**
+ * Three hundred runs of up to three hundred operations is deliberately more work than a unit test,
+ * and it can pass the five-second default while the rest of the suite is running in parallel and
+ * fail it on a slower machine. The timeout is raised rather than the coverage lowered: a property
+ * test that shrinks to fit a stopwatch stops being the thing the milestone asked for.
+ */
+const PROPERTY_TIMEOUT_MS = 60_000
+
 describe('spool invariants over arbitrary operation sequences', () => {
-  it('hold for the default spool, which rolls at its cap', () => {
+  it('hold for the default spool, which rolls at its cap', { timeout: PROPERTY_TIMEOUT_MS }, () => {
     const reached = runProperty('default')
 
     expect(reached.eviction, 'the run never filled the buffer, so rolling went untested').toBe(true)
     expect(reached.empty).toBe(true)
   })
 
-  it('hold for a saved spool, which refuses at its cap', () => {
+  it('hold for a saved spool, which refuses at its cap', { timeout: PROPERTY_TIMEOUT_MS }, () => {
     const reached = runProperty('saved')
 
     expect(reached.refusal, 'the run never filled the spool, so refusing went untested').toBe(true)
@@ -153,7 +161,7 @@ describe('spool invariants over arbitrary operation sequences', () => {
 })
 
 describe('serving never removes a clip', () => {
-  it('leaves the clip list identical however many times it is served', () => {
+  it('leaves the clip list identical however many times it is served', { timeout: PROPERTY_TIMEOUT_MS }, () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 40 }),

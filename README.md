@@ -43,8 +43,9 @@ nested directory fails on Windows' 260-character path limit.
 
 ## Status
 
-M8 — managing spools: make, rename, clear, and delete spools, switch which one captures, and delete
-a single clip. The default spool can be cleared but never deleted — something has to catch the next
-copy. Underneath are M7's arranging and whole-spool paste, M6's encrypted store, M5's consent
-prompts, M4's serve, M3's capture, M2's spool core, M1's zero-network gate, and M0's tray icon and
-summon hotkey.
+M9 — retention and control: an optional per-spool age limit, a settings panel listing every standing
+answer with a way to revoke it, a configurable consent timeout, the caps shown read-only, and
+**Reset everything** — a failsafe that deletes the store, the sealed key, and the preferences
+without reading any of them, then restarts. Underneath are M8's spool management, M7's arranging and
+whole-spool paste, M6's encrypted store, M5's consent prompts, M4's serve, M3's capture, M2's spool
+core, M1's zero-network gate, and M0's tray icon and summon hotkey.

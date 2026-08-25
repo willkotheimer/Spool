@@ -23,6 +23,10 @@ declare global {
     deleteSpool(spoolId: string): Promise<void>
     setActiveSpool(spoolId: string): Promise<void>
     deleteClip(clipId: string): Promise<void>
+    setRetention(spoolId: string, hours: number | null): Promise<void>
+    revokeSourceRule(sourceApp: string): Promise<void>
+    setConsentTimeout(seconds: number): Promise<void>
+    resetEverything(): Promise<{ failed: Array<{ path: string; reason: string }> }>
     clearSpool(spoolId: string): Promise<void>
     onState(listener: (state: AppState) => void): () => void
   }

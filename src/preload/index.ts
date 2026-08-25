@@ -57,6 +57,17 @@ const api = {
   setActiveSpool: (spoolId: string): Promise<void> =>
     ipcRenderer.invoke(CHANNELS.setActiveSpool, spoolId),
   deleteClip: (clipId: string): Promise<void> => ipcRenderer.invoke(CHANNELS.deleteClip, clipId),
+
+  /** Retention and control (PLAN.md 11, M9). */
+  setRetention: (spoolId: string, hours: number | null): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.setRetention, spoolId, hours),
+  revokeSourceRule: (sourceApp: string): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.revokeSourceRule, sourceApp),
+  setConsentTimeout: (seconds: number): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.setConsentTimeout, seconds),
+  /** Wipes the store, the sealed key, and the preferences, then restarts (PLAN.md 11, M9). */
+  resetEverything: (): Promise<{ failed: Array<{ path: string; reason: string }> }> =>
+    ipcRenderer.invoke(CHANNELS.resetEverything),
   clearSpool: (spoolId: string): Promise<void> => ipcRenderer.invoke(CHANNELS.clearSpool, spoolId),
 
   /** Every subsequent state. Returns its own unsubscribe, so React can clean up. */
