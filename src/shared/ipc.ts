@@ -89,7 +89,10 @@ export interface SpoolSummary {
   readonly id: string
   readonly name: string
   readonly count: number
+  /** The spool that captures, serves, and is arranged. */
   readonly isActive: boolean
+  /** The default spool can be cleared but never deleted — something has to catch a copy. */
+  readonly isDefault: boolean
 }
 
 /** A joined result waiting on a yes, because it is large enough to be felt system-wide. */
@@ -125,5 +128,11 @@ export const CHANNELS = {
   saveArrangement: 'spool:save-arrangement',
   createSpoolFromArrangement: 'spool:create-spool-from-arrangement',
   setSeparator: 'spool:set-separator',
-  setWindowState: 'spool:set-window-state'
+  setWindowState: 'spool:set-window-state',
+  createSpool: 'spool:create-spool',
+  renameSpool: 'spool:rename-spool',
+  deleteSpool: 'spool:delete-spool',
+  setActiveSpool: 'spool:set-active-spool',
+  deleteClip: 'spool:delete-clip',
+  clearSpool: 'spool:clear-spool'
 } as const

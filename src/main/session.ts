@@ -16,7 +16,8 @@ import {
 } from './clipboard/capture'
 import { loadClipboardWatcher, type ClipboardWatcher, type WatcherLoad } from './clipboard/watcher'
 import { isSeparatorKind, joinSpool, needsConfirmation, type SeparatorKind } from './core/join'
-import { arrange, createSpool, serve, setMode } from './core/spool'
+import { SAVED_SPOOL_CAP } from './core/limits'
+import { arrange, clear, createSpool, deleteClip, serve, setMode } from './core/spool'
 import type { Clip, Mode, Spool } from './core/types'
 import type { ClipboardSnapshot } from './detect/admit'
 import { wipe } from './detect/bytes'
@@ -55,8 +56,8 @@ export class Session {
   private pendingTimer: ReturnType<typeof setTimeout> | null = null
 
   /**
-   * Spools other than the active one. At M7 these can only be created by "save as a new spool";
-   * choosing which one captures and serves is M8, and this list is what that will select from.
+   * Every spool except the active one, whose state lives in `this.state.spool` because that is what
+   * the capture pipeline reads. `syncActive` keeps the two consistent.
    */
   private otherSpools: Spool[] = []
 
@@ -88,7 +89,7 @@ export class Session {
    * Attach a store and restore what it holds (PLAN.md 11, M6). Everything the user had — clips,
    * cursor, mode, and standing answers — comes back as it was.
    */
-  attachStore(store: Store): void {
+  attachStore(store: Store, activeSpoolId: string | null = null): void {
     this.store = store
     this.storage = { available: true, reason: null, canStartFresh: false, path: store.path }
 
@@ -96,16 +97,25 @@ export class Session {
     const restored = stored.find((spool) => spool.kind === 'default')
     const rules = store.loadSourceRules()
 
-    this.otherSpools = stored.filter((spool) => spool.kind !== 'default')
+    this.otherSpools = stored.filter((spool) => spool.id !== (restored ?? this.state.spool).id)
     this.state = {
       ...this.state,
       spool: restored ?? this.state.spool,
       sourceRules: rules
     }
+    // Restore whichever spool was active, falling back to the default when the id is stale.
+    const wanted = this.otherSpools.find((spool) => spool.id === activeSpoolId)
+    if (wanted !== undefined) this.activate(wanted)
+
     this.savedSpool = this.state.spool
     this.savedRules = this.state.sourceRules
 
     this.publish()
+  }
+
+  /** Which spool captures, for the caller to remember across restarts. */
+  getActiveSpoolId(): string {
+    return this.state.spool.id
   }
 
   /** Say why nothing is being stored, so the window can offer whatever way out there is. */
@@ -310,11 +320,139 @@ export class Session {
     this.publish()
   }
 
+  /**
+   * Make a spool, empty and ready to capture into (PLAN.md 11, M8).
+   *
+   * At the cap it refuses rather than evicting one, for the same reason a saved spool refuses at
+   * its clip cap: nothing anyone built goes away to make room (PLAN.md 3, Limits).
+   */
+  createNamedSpool(name: string, newId: () => string = () => randomUUID()): string | null {
+    if (this.allSpools().length >= SAVED_SPOOL_CAP) {
+      this.notice = {
+        category: 'unsupported',
+        message: `That would be more than ${SAVED_SPOOL_CAP} spools. Delete one first.`
+      }
+      this.publish()
+      return null
+    }
+
+    const created: Spool = createSpool({
+      id: newId(),
+      name: cleanName(name),
+      kind: 'saved',
+      mode: this.state.spool.mode
+    })
+
+    this.otherSpools = [...this.otherSpools, created]
+    this.store?.saveSpool(created)
+    this.setActiveSpool(created.id)
+    return created.id
+  }
+
+  /** Rename a spool. Nothing else about it changes. */
+  renameSpool(spoolId: string, name: string): void {
+    const renamed = cleanName(name)
+
+    if (spoolId === this.state.spool.id) {
+      this.state = { ...this.state, spool: { ...this.state.spool, name: renamed } }
+      this.store?.saveSpool(this.state.spool)
+    } else {
+      this.otherSpools = this.otherSpools.map((spool) =>
+        spool.id === spoolId ? { ...spool, name: renamed } : spool
+      )
+      const spool = this.otherSpools.find((candidate) => candidate.id === spoolId)
+      if (spool !== undefined) this.store?.saveSpool(spool)
+    }
+
+    this.publish()
+  }
+
+  /**
+   * Delete a spool and every clip on it.
+   *
+   * **The default spool refuses**: it is the buffer everything is captured into when the user has
+   * made no other choice, so there has to be one (PLAN.md 2). It can be cleared instead.
+   */
+  deleteSpool(spoolId: string): void {
+    const target = this.allSpools().find((spool) => spool.id === spoolId)
+    if (target === undefined || target.kind === 'default') return
+
+    this.otherSpools = this.otherSpools.filter((spool) => spool.id !== spoolId)
+    this.store?.deleteSpool(spoolId)
+
+    // The active spool cannot be one that no longer exists. Switching away has to *discard* what
+    // it leaves rather than keep it, which is the one way this differs from an ordinary switch.
+    if (this.state.spool.id === spoolId) {
+      const fallback = this.otherSpools.find((spool) => spool.kind === 'default')
+      if (fallback !== undefined) this.activate(fallback, { keepLeaving: false })
+    }
+
+    this.publish()
+  }
+
+  /** Switch which spool captures, serves, and is arranged. */
+  setActiveSpool(spoolId: string): void {
+    if (spoolId === this.state.spool.id) return
+
+    const next = this.otherSpools.find((spool) => spool.id === spoolId)
+    if (next === undefined) return
+
+    this.activate(next)
+    this.publish()
+  }
+
+  /**
+   * Remove one clip. The cursor moves per PLAN.md 3 — to the next clip in the mode's direction,
+   * clamped to the nearest end — because deletion is something the user did, and the spool has to
+   * stay usable afterwards.
+   */
+  deleteClip(clipId: string): void {
+    this.state = { ...this.state, spool: deleteClip(this.state.spool, clipId) }
+    this.publish()
+  }
+
+  /** Empty a spool without removing it. Available for the default spool, which cannot be deleted. */
+  clearSpool(spoolId: string): void {
+    if (spoolId === this.state.spool.id) {
+      this.state = { ...this.state, spool: clear(this.state.spool) }
+      // The next copy is not a duplicate of something that is no longer there.
+      this.state = { ...this.state, lastCapturedText: null }
+    } else {
+      this.otherSpools = this.otherSpools.map((spool) =>
+        spool.id === spoolId ? clear(spool) : spool
+      )
+      const spool = this.otherSpools.find((candidate) => candidate.id === spoolId)
+      if (spool !== undefined) this.store?.saveSpool(spool)
+    }
+
+    this.publish()
+  }
+
   /** Change direction. The cursor stays on the clip it was on (PLAN.md 3). */
   toggleMode(): void {
     const next: Mode = this.state.spool.mode === 'fifo' ? 'lifo' : 'fifo'
     this.state = { ...this.state, spool: setMode(this.state.spool, next) }
     this.publish()
+  }
+
+  private allSpools(): Spool[] {
+    return [this.state.spool, ...this.otherSpools]
+  }
+
+  /**
+   * Swap which spool the pipeline is working on.
+   *
+   * `keepLeaving` is false in exactly one case — the active spool has just been deleted, and
+   * putting it back would undo the deletion the user asked for.
+   */
+  private activate(next: Spool, { keepLeaving = true }: { keepLeaving?: boolean } = {}): void {
+    const leaving = this.state.spool
+    const remaining = this.otherSpools.filter((spool) => spool.id !== next.id)
+
+    this.otherSpools = keepLeaving ? [...remaining, leaving] : remaining
+    // Duplicate suppression compares against the last capture *in this spool*, so it resets.
+    this.state = { ...this.state, spool: next, lastCapturedText: null }
+    this.savedSpool = null
   }
 
   getState(): AppState {
@@ -324,15 +462,15 @@ export class Session {
       capture: this.capture,
       storage: this.storage,
       separator: this.settings.separator,
-      spools: [
-        { id: this.state.spool.id, name: this.state.spool.name, count: this.state.spool.clips.length, isActive: true },
-        ...this.otherSpools.map((spool) => ({
+      spools: this.allSpools()
+        .map((spool) => ({
           id: spool.id,
           name: spool.name,
           count: spool.clips.length,
-          isActive: false
+          isActive: spool.id === this.state.spool.id,
+          isDefault: spool.kind === 'default'
         }))
-      ],
+        .sort((a, b) => (a.isDefault === b.isDefault ? 0 : a.isDefault ? -1 : 1)),
       pendingJoin:
         this.pendingJoin === null
           ? null
@@ -430,4 +568,10 @@ export class Session {
       this.savedRules = this.state.sourceRules
     }
   }
+}
+
+/** A spool always has a name, even when the user did not give it one. */
+function cleanName(name: string): string {
+  const trimmed = name.trim()
+  return trimmed.length === 0 ? 'New spool' : trimmed
 }

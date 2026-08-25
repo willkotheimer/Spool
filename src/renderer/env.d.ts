@@ -18,6 +18,12 @@ declare global {
     createSpoolFromArrangement(name: string, clipIds: readonly string[]): Promise<void>
     setSeparator(separator: SeparatorKind): Promise<void>
     setWindowState(state: WindowStateName): Promise<void>
+    createSpool(name: string): Promise<string | null>
+    renameSpool(spoolId: string, name: string): Promise<void>
+    deleteSpool(spoolId: string): Promise<void>
+    setActiveSpool(spoolId: string): Promise<void>
+    deleteClip(clipId: string): Promise<void>
+    clearSpool(spoolId: string): Promise<void>
     onState(listener: (state: AppState) => void): () => void
   }
 

@@ -21,9 +21,13 @@ describe('settings (PLAN.md 3, 8)', () => {
   })
 
   it('round-trips what the user chose', () => {
-    saveSettings(path(), { separator: 'tab', window: 'expanded' })
+    saveSettings(path(), { separator: 'tab', window: 'expanded', activeSpoolId: 'abc' })
 
-    expect(loadSettings(path())).toEqual({ separator: 'tab', window: 'expanded' })
+    expect(loadSettings(path())).toEqual({
+      separator: 'tab',
+      window: 'expanded',
+      activeSpoolId: 'abc'
+    })
   })
 
   it('falls back to defaults rather than failing on a file edited into nonsense', () => {
@@ -37,6 +41,10 @@ describe('settings (PLAN.md 3, 8)', () => {
   it('keeps the half of a partial file that makes sense', () => {
     writeFileSync(path(), JSON.stringify({ separator: 'comma' }))
 
-    expect(loadSettings(path())).toEqual({ separator: 'comma', window: 'compact' })
+    expect(loadSettings(path())).toEqual({
+      separator: 'comma',
+      window: 'compact',
+      activeSpoolId: null
+    })
   })
 })

@@ -444,13 +444,24 @@ describe('the consent timeout (PLAN.md 4)', () => {
 describe('persistence (PLAN.md 11, M6)', () => {
   /** An in-memory stand-in for the encrypted store, recording what was written. */
   function fakeStore(initial: { spools?: Spool[]; rules?: Map<string, SourceAction> } = {}) {
-    const saved: { spools: Spool[]; rules: Map<string, SourceAction>[] } = { spools: [], rules: [] }
+    const saved: { spools: Spool[]; deleted: string[]; rules: Map<string, SourceAction>[] } = {
+      spools: [],
+      deleted: [],
+      rules: []
+    }
     return {
       saved,
       store: {
         path: 'C:/Users/someone/AppData/Roaming/Spool/spool.db',
-        saveSpool: (spool: Spool) => saved.spools.push(spool),
-        saveSourceRules: (rules: SourceRules) => saved.rules.push(new Map(rules)),
+        saveSpool: (spool: Spool) => {
+          saved.spools.push(spool)
+        },
+        deleteSpool: (spoolId: string) => {
+          saved.deleted.push(spoolId)
+        },
+        saveSourceRules: (rules: SourceRules) => {
+          saved.rules.push(new Map(rules))
+        },
         loadSpools: () => initial.spools ?? [],
         loadSourceRules: () => initial.rules ?? new Map<string, SourceAction>(),
         close: () => {}
@@ -709,7 +720,10 @@ describe('arranging (PLAN.md 11, M7)', () => {
         saved: spools,
         store: {
           path: 'x',
-          saveSpool: (spool: Spool) => spools.push(spool),
+          saveSpool: (spool: Spool) => {
+            spools.push(spool)
+          },
+          deleteSpool: () => {},
           saveSourceRules: () => {},
           loadSpools: () => [],
           loadSourceRules: () => new Map<string, SourceAction>(),
@@ -741,5 +755,156 @@ describe('arranging (PLAN.md 11, M7)', () => {
     session.createSpoolFromArrangement('   ', ids)
 
     expect(session.getState().spools.map((s) => s.name)).toContain('New spool')
+  })
+})
+
+describe('managing spools and clips (PLAN.md 11, M8)', () => {
+  const fill = (watcher: ReturnType<typeof fakeWatcher>, values: string[]) => {
+    for (const value of values) watcher.change(text(value))
+  }
+  const names = (session: Session) => session.getState().spools.map((s) => s.name)
+  const active = (session: Session) => session.getState().spools.find((s) => s.isActive)
+
+  it('creates a spool and makes it the one that captures', () => {
+    const { session, watcher } = started()
+    fill(watcher, ['in the default'])
+
+    session.createNamedSpool('Q3 figures')
+
+    expect(active(session)?.name).toBe('Q3 figures')
+    fill(watcher, ['in the new one'])
+    expect(session.getState().spool.clips.map((c) => c.preview)).toEqual(['in the new one'])
+  })
+
+  it('switches back and forth without losing either spool', () => {
+    const { session, watcher } = started()
+    fill(watcher, ['default clip'])
+    const defaultId = session.getState().spools.find((s) => s.isDefault)?.id ?? ''
+
+    const createdId = session.createNamedSpool('Second') ?? ''
+    fill(watcher, ['second clip'])
+
+    session.setActiveSpool(defaultId)
+    expect(session.getState().spool.clips.map((c) => c.preview)).toEqual(['default clip'])
+
+    session.setActiveSpool(createdId)
+    expect(session.getState().spool.clips.map((c) => c.preview)).toEqual(['second clip'])
+  })
+
+  it('renames a spool, whether it is the active one or not', () => {
+    const { session } = started()
+    const createdId = session.createNamedSpool('Typo') ?? ''
+    session.renameSpool(createdId, 'Fixed')
+    expect(names(session)).toContain('Fixed')
+
+    const defaultId = session.getState().spools.find((s) => s.isDefault)?.id ?? ''
+    session.renameSpool(defaultId, 'Inbox')
+    expect(names(session)).toContain('Inbox')
+  })
+
+  it('gives a renamed spool a name even when handed only spaces', () => {
+    const { session } = started()
+    const createdId = session.createNamedSpool('Something') ?? ''
+
+    session.renameSpool(createdId, '   ')
+
+    expect(names(session)).toContain('New spool')
+  })
+
+  it('deletes a saved spool and falls back to the default one', () => {
+    const { session, watcher } = started()
+    fill(watcher, ['default clip'])
+    const createdId = session.createNamedSpool('Temporary') ?? ''
+    fill(watcher, ['doomed clip'])
+
+    session.deleteSpool(createdId)
+
+    expect(names(session)).not.toContain('Temporary')
+    expect(active(session)?.isDefault).toBe(true)
+    expect(session.getState().spool.clips.map((c) => c.preview)).toEqual(['default clip'])
+  })
+
+  it('refuses to delete the default spool, which has to exist to catch a copy', () => {
+    const { session } = started()
+    const defaultId = session.getState().spools.find((s) => s.isDefault)?.id ?? ''
+
+    session.deleteSpool(defaultId)
+
+    expect(session.getState().spools.some((s) => s.isDefault)).toBe(true)
+    // And the window is told, so it can offer Clear instead of Delete.
+    expect(session.getState().spools.find((s) => s.isDefault)?.isDefault).toBe(true)
+  })
+
+  it('clears a spool without removing it', () => {
+    const { session, watcher } = started()
+    fill(watcher, ['one', 'two'])
+    const defaultId = session.getState().spools.find((s) => s.isDefault)?.id ?? ''
+
+    session.clearSpool(defaultId)
+
+    expect(session.getState().spool.count).toBe(0)
+    expect(session.getState().spool.cursorClipId).toBeNull()
+    expect(names(session)).toContain('Default spool')
+  })
+
+  it('captures again immediately after a clear, even the same text', () => {
+    const { session, watcher } = started()
+    fill(watcher, ['same text'])
+    const defaultId = session.getState().spools.find((s) => s.isDefault)?.id ?? ''
+
+    session.clearSpool(defaultId)
+    fill(watcher, ['same text'])
+
+    expect(session.getState().spool.count).toBe(1)
+  })
+
+  it('deletes one clip, moving the cursor per the mode direction', () => {
+    const { session, watcher } = started()
+    fill(watcher, ['a', 'b', 'c'])
+    const ids = session.getState().spool.clips.map((clip) => clip.id)
+    expect(session.getState().spool.cursorClipId).toBe(ids[0])
+
+    session.deleteClip(ids[0])
+
+    expect(session.getState().spool.clips.map((c) => c.preview)).toEqual(['b', 'c'])
+    expect(session.getState().spool.cursorClipId).toBe(ids[1])
+  })
+
+  it('deleting a clip that is not the cursor leaves the cursor alone', () => {
+    const { session, watcher } = started()
+    fill(watcher, ['a', 'b', 'c'])
+    const ids = session.getState().spool.clips.map((clip) => clip.id)
+
+    session.deleteClip(ids[2])
+
+    expect(session.getState().spool.cursorClipId).toBe(ids[0])
+  })
+
+  it('writes every one of these through to the store', () => {
+    const { session, watcher } = started()
+    const spools: Spool[] = []
+    const deleted: string[] = []
+    session.attachStore({
+      path: 'x',
+      saveSpool: (spool) => {
+        spools.push(spool)
+      },
+      deleteSpool: (id) => {
+        deleted.push(id)
+      },
+      saveSourceRules: () => {},
+      loadSpools: () => [],
+      loadSourceRules: () => new Map<string, SourceAction>(),
+      close: () => {}
+    })
+
+    fill(watcher, ['a'])
+    const createdId = session.createNamedSpool('Kept') ?? ''
+    session.renameSpool(createdId, 'Renamed')
+    const doomedId = session.createNamedSpool('Doomed') ?? ''
+    session.deleteSpool(doomedId)
+
+    expect(spools.some((spool) => spool.name === 'Renamed')).toBe(true)
+    expect(deleted).toContain(doomedId)
   })
 })

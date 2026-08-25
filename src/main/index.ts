@@ -49,7 +49,7 @@ if (!app.requestSingleInstanceLock()) {
 
     const paths = storePaths(app.getPath('userData'))
     const attach = (result: ReturnType<typeof openStore>): void => {
-      if (result.ok) spoolSession.attachStore(result.store)
+      if (result.ok) spoolSession.attachStore(result.store, settings.activeSpoolId)
       else spoolSession.reportStorageFailure(explainStorageFailure(result))
     }
     attach(openStore(paths, safeStorage))
@@ -60,7 +60,11 @@ if (!app.requestSingleInstanceLock()) {
       startFreshStore: () => attach(startFresh(paths, safeStorage)),
       setWindowState: (state: WindowState) => {
         setWindowState(state)
-        saveSettings(settingsFile, { separator: spoolSession.getSeparator(), window: state })
+        saveSettings(settingsFile, {
+          separator: spoolSession.getSeparator(),
+          window: state,
+          activeSpoolId: spoolSession.getActiveSpoolId()
+        })
       }
     })
 
@@ -68,7 +72,8 @@ if (!app.requestSingleInstanceLock()) {
     spoolSession.onChange(() =>
       saveSettings(settingsFile, {
         separator: spoolSession.getSeparator(),
-        window: settings.window
+        window: settings.window,
+        activeSpoolId: spoolSession.getActiveSpoolId()
       })
     )
 

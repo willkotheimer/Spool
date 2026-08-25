@@ -3,7 +3,13 @@ import type { Spool } from '../core/types'
 import type { SourceAction, SourceRules } from '../detect/consent'
 import { openDatabase, type SpoolDatabase } from './database'
 import { discardStore, loadOrCreateKey, type Sealer } from './key'
-import { loadSourceRules, loadSpools, saveSourceRules, saveSpool } from './repository'
+import {
+  deleteSpool,
+  loadSourceRules,
+  loadSpools,
+  saveSourceRules,
+  saveSpool
+} from './repository'
 
 /**
  * The store, assembled (PLAN.md 6, 7): a key sealed by the operating system, an encrypted SQLite
@@ -29,6 +35,7 @@ export function storePaths(userDataDirectory: string): StorePaths {
 export interface Store {
   readonly path: string
   saveSpool(spool: Spool): void
+  deleteSpool(spoolId: string): void
   saveSourceRules(rules: SourceRules): void
   loadSpools(): Spool[]
   loadSourceRules(): Map<string, SourceAction>
@@ -77,6 +84,7 @@ function wrap(database: SpoolDatabase, path: string, now: () => string): Store {
   return {
     path,
     saveSpool: (spool) => saveSpool(database, spool, now()),
+    deleteSpool: (spoolId) => deleteSpool(database, spoolId),
     saveSourceRules: (rules) => saveSourceRules(database, rules, now()),
     loadSpools: () => loadSpools(database),
     loadSourceRules: () => loadSourceRules(database),
