@@ -60,17 +60,33 @@ function fakeStore(
     rules: Map<string, SourceAction>[]
   } = { spools: [], deleted: [], deletedBatches: [], rules: [] }
 
+  // Held and mutated like the real store, so deleting really does free space: a fake that reports
+  // a fixed size cannot show the capacity gate lifting (measured at M12).
+  let held: Spool[] = initial.spools ?? []
+  const sizeOf = (spool: Spool) =>
+    spool.clips.reduce((total, clip) => total + clip.byteLength, 0)
+  const declared = initial.bytes
+  const totalOf = () => held.reduce((total, spool) => total + sizeOf(spool), 0)
+  // When a test declares a total, keep the difference between it and the seeded spools, so
+  // deleting a spool subtracts exactly that spool's share.
+  const padding = declared === undefined ? 0 : declared - totalOf()
+
   const store = {
     path: 'C:/Users/someone/AppData/Roaming/Spool/spool.db',
     saveSpool: (spool: Spool) => {
       saved.spools.push(spool)
+      held = held.some((candidate) => candidate.id === spool.id)
+        ? held.map((candidate) => (candidate.id === spool.id ? spool : candidate))
+        : [...held, spool]
     },
     deleteSpool: (spoolId: string) => {
       saved.deleted.push(spoolId)
+      held = held.filter((spool) => spool.id !== spoolId)
     },
     deleteSpools: (spoolIds: readonly string[]) => {
       saved.deletedBatches.push([...spoolIds])
       saved.deleted.push(...spoolIds)
+      held = held.filter((spool) => !spoolIds.includes(spool.id))
     },
     saveSourceRules: (rules: SourceRules) => {
       saved.rules.push(new Map(rules))
@@ -78,12 +94,12 @@ function fakeStore(
     loadSpools: () => initial.spools ?? [],
     loadSourceRules: () => initial.rules ?? new Map<string, SourceAction>(),
     spoolSizes: () =>
-      (initial.spools ?? []).map((spool) => ({
+      held.map((spool) => ({
         spoolId: spool.id,
         clips: spool.clips.length,
-        bytes: spool.clips.reduce((total, clip) => total + clip.byteLength, 0)
+        bytes: sizeOf(spool)
       })),
-    storeBytes: () => initial.bytes ?? 0,
+    storeBytes: () => Math.max(totalOf() + padding, 0),
     close: () => {}
   }
 
@@ -1260,5 +1276,251 @@ describe('starred spools (PLAN.md 10)', () => {
     watcher.change(text('an ordinary clip'))
 
     expect(session.getState().spool.clips.map((c) => c.preview)).toContain('an ordinary clip')
+  })
+})
+
+describe('the capacity floor (PLAN.md 9)', () => {
+  const MIB = 1024 * 1024
+  const BUDGET = 512 * MIB
+
+  const sized = (id: string, name: string, bytes: number, starred = false): Spool => ({
+    id,
+    name,
+    kind: 'saved',
+    mode: 'fifo',
+    clips: [
+      {
+        id: `${id}-clip`,
+        content: 'x',
+        preview: 'x',
+        byteLength: bytes,
+        sourceApp: null,
+        wasFlagged: false,
+        capturedAt: '2026-08-01T00:00:00.000Z'
+      }
+    ],
+    cursorClipId: `${id}-clip`,
+    retentionHours: null,
+    lastUsedAt: '2026-08-01T00:00:00.000Z',
+    isStarred: starred
+  })
+
+  const defaultSpool: Spool = {
+    id: 'default',
+    name: 'Default spool',
+    kind: 'default',
+    mode: 'fifo',
+    clips: [],
+    cursorClipId: null,
+    retentionHours: null,
+    lastUsedAt: null,
+    isStarred: false
+  }
+
+  /** A store past the floor: 97% of the budget across three ordinary spools. */
+  function pastTheFloor() {
+    const each = Math.round((BUDGET * 0.97) / 3)
+    return fakeStore({
+      spools: [
+        defaultSpool,
+        sized('a', 'Small pile', each - 20 * MIB),
+        sized('b', 'Middle pile', each),
+        sized('c', 'Big pile', each + 20 * MIB)
+      ],
+      bytes: Math.round(BUDGET * 0.97)
+    })
+  }
+
+  it('gates at the floor and says how much has to go', () => {
+    const { session } = started()
+    session.attachStore(pastTheFloor().store)
+
+    const { capacity } = session.getState()
+    expect(capacity.gated).toBe(true)
+    expect(capacity.prompting).toBe(true)
+    expect(capacity.overFloorBytes).toBeGreaterThan(0)
+  })
+
+  it('suspends capture: copying adds no clip while gated', () => {
+    const { session, watcher } = started()
+    session.attachStore(pastTheFloor().store)
+    const before = session.getState().spool.count
+
+    watcher.change(text('a copy made while the store is full'))
+
+    expect(session.getState().spool.count).toBe(before)
+    expect(session.getState().notice?.message).toMatch(/not being kept/i)
+  })
+
+  it('leaves every stored clip readable, servable, and reorderable — invariant 8', () => {
+    const { session, written } = started()
+    // The clips have to be in the store: attaching restores the active spool from it.
+    const withClips: Spool = {
+      ...defaultSpool,
+      clips: ['one', 'two', 'three'].map((content, i) => ({
+        id: `clip-${i}`,
+        content,
+        preview: content,
+        byteLength: content.length,
+        sourceApp: null,
+        wasFlagged: false,
+        capturedAt: '2026-08-01T00:00:00.000Z'
+      })),
+      cursorClipId: 'clip-0'
+    }
+    const each = Math.round((BUDGET * 0.97) / 2)
+    session.attachStore(
+      fakeStore({
+        spools: [withClips, sized('a', 'Pile A', each), sized('b', 'Pile B', each)],
+        bytes: Math.round(BUDGET * 0.97)
+      }).store
+    )
+    expect(session.getState().capacity.gated).toBe(true)
+
+    // Reading.
+    const clips = session.getState().spool.clips
+    expect(clips.map((c) => c.preview)).toEqual(['one', 'two', 'three'])
+
+    // Serving, and the cursor advancing.
+    session.serveNext()
+    expect(written.at(-1)).toBe('one')
+    session.serveNext()
+    expect(written.at(-1)).toBe('two')
+
+    // Reordering.
+    session.saveArrangement([clips[2].id, clips[0].id, clips[1].id])
+    expect(session.getState().spool.clips.map((c) => c.preview)).toEqual(['three', 'one', 'two'])
+
+    // And the whole spool still pastes.
+    session.pasteWholeSpool()
+    expect(written.at(-1)).toBe('three\none\ntwo')
+  })
+
+  it('orders the gate candidates largest first', () => {
+    const { session } = started()
+    session.attachStore(pastTheFloor().store)
+
+    expect(session.getState().capacity.candidates.map((c) => c.name)).toEqual([
+      'Big pile',
+      'Middle pile',
+      'Small pile'
+    ])
+  })
+
+  it('resumes capture the moment enough is deleted, with no restart', () => {
+    const { session, watcher } = started()
+    session.attachStore(pastTheFloor().store)
+    expect(session.getState().capacity.gated).toBe(true)
+
+    session.deleteSpools(['b', 'c'])
+
+    expect(session.getState().capacity.gated).toBe(false)
+    watcher.change(text('a copy made after freeing space'))
+    expect(session.getState().spool.clips.map((c) => c.preview)).toContain(
+      'a copy made after freeing space'
+    )
+  })
+
+  it('Pause capture deletes nothing, closes the gate, and stops capture', () => {
+    const { session, watcher } = started()
+    const { store, saved } = pastTheFloor()
+    session.attachStore(store)
+
+    session.pauseCapture()
+
+    expect(saved.deletedBatches).toEqual([])
+    expect(session.getState().capacity.prompting).toBe(false)
+    expect(session.getState().capacity.paused).toBe(true)
+
+    watcher.change(text('a copy made while paused'))
+    expect(session.getState().spool.count).toBe(0)
+    expect(session.getState().notice?.message).toMatch(/paused/i)
+  })
+
+  it('resuming by hand starts capture again', () => {
+    const { session, watcher } = started()
+    session.attachStore(fakeStore({ spools: [defaultSpool], bytes: 0 }).store)
+    session.pauseCapture()
+
+    session.resumeCapture()
+    watcher.change(text('captured after resuming'))
+
+    expect(session.getState().spool.count).toBe(1)
+  })
+
+  it('never names a starred spool at the gate, and never asks for an unstar', () => {
+    const each = Math.round((BUDGET * 0.97) / 3)
+    const { session } = started()
+    session.attachStore(
+      fakeStore({
+        spools: [
+          defaultSpool,
+          sized('starred', 'Starred and safe', each, true),
+          sized('plain-a', 'Plain A', each),
+          sized('plain-b', 'Plain B', each)
+        ],
+        bytes: Math.round(BUDGET * 0.97)
+      }).store
+    )
+
+    const { capacity } = session.getState()
+    expect(capacity.gated).toBe(true)
+    expect(capacity.candidates.map((c) => c.name)).toEqual(['Plain A', 'Plain B'])
+    expect(JSON.stringify(capacity)).not.toContain('Starred and safe')
+    expect(JSON.stringify(capacity).toLowerCase()).not.toContain('unstar')
+  })
+
+  it('stays solvable with five starred spools sitting exactly at the reserve', () => {
+    // PLAN.md 10's arithmetic, as the app actually assembles it: starred at half the budget, the
+    // rest ordinary, and the gate must still offer enough to get back under the floor.
+    const reserve = BUDGET / 2
+    const starredEach = reserve / 5
+    const nonStarred = Math.round(BUDGET * 0.97) - reserve
+
+    const { session } = started()
+    session.attachStore(
+      fakeStore({
+        spools: [
+          defaultSpool,
+          ...Array.from({ length: 5 }, (_, i) =>
+            sized(`star-${i}`, `Starred ${i}`, starredEach, true)
+          ),
+          ...Array.from({ length: 4 }, (_, i) => sized(`plain-${i}`, `Plain ${i}`, nonStarred / 4))
+        ],
+        bytes: Math.round(BUDGET * 0.97)
+      }).store
+    )
+
+    const { capacity } = session.getState()
+    const offered = capacity.candidates.reduce((total, c) => total + c.bytes, 0)
+
+    expect(capacity.gated).toBe(true)
+    expect(capacity.candidates).toHaveLength(4)
+    expect(offered).toBeGreaterThanOrEqual(capacity.overFloorBytes)
+  })
+
+  it('offers a door that deletes nothing even when starred content already exceeds the reserve', () => {
+    // The pathological case PLAN.md 10 names: an older build, or a changed cap. There may be
+    // nothing to offer, and the gate must still not name a starred spool.
+    const { session } = started()
+    session.attachStore(
+      fakeStore({
+        spools: [
+          defaultSpool,
+          sized('over-1', 'Over one', Math.round(BUDGET * 0.5), true),
+          sized('over-2', 'Over two', Math.round(BUDGET * 0.47), true)
+        ],
+        bytes: Math.round(BUDGET * 0.97)
+      }).store
+    )
+
+    const { capacity } = session.getState()
+    expect(capacity.gated).toBe(true)
+    expect(capacity.candidates).toEqual([])
+
+    // Pause capture still works, and still deletes nothing.
+    session.pauseCapture()
+    expect(session.getState().capacity.paused).toBe(true)
+    expect(session.getState().spools).toHaveLength(3)
   })
 })

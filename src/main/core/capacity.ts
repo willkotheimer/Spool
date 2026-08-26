@@ -133,3 +133,25 @@ export function freedBy(
 export function shouldAdvise(measure: Measure): boolean {
   return measure.ratio >= ADVISE_AT
 }
+
+/**
+ * Whether a measure has reached the floor, where the app stops accepting new clips (PLAN.md 9).
+ *
+ * **The only hard gate in the app, and deliberately narrow: it suspends capture only.** Every
+ * stored clip stays readable, servable, and reorderable — invariant 8, and what keeps a quota from
+ * taking someone's own work away from them.
+ */
+export function shouldGate(measure: Measure): boolean {
+  return measure.ratio >= GATE_AT
+}
+
+/**
+ * How much has to go to get back under the floor.
+ *
+ * The reserve of PLAN.md 10 is what makes this always solvable without touching a star: starred
+ * usage is capped at half the budget and the floor is at 95%, so at least 45% of the budget is
+ * non-starred and reclaimable.
+ */
+export function bytesOverFloor(storeBytes: number, cap: number): number {
+  return Math.max(Math.ceil(storeBytes - cap * GATE_AT), 0)
+}

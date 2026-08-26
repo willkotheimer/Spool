@@ -34,7 +34,7 @@ export function App(): JSX.Element {
   if (capacity.prompting) {
     return (
       <div className="relative h-full">
-        <CapacityAdvisor capacity={capacity} />
+        <CapacityAdvisor capacity={capacity} onOpenSettings={() => setShowSettings(true)} />
       </div>
     )
   }
@@ -108,6 +108,19 @@ export function App(): JSX.Element {
             </button>
           )}
         </div>
+      )}
+
+      {capacity.paused && (
+        <p className="mx-2 mb-1 flex items-center justify-between gap-2 rounded bg-spool-thread/10 px-2 py-1.5 text-[11px] text-spool-thread">
+          <span>Capture is paused. Everything already here still works.</span>
+          <button
+            type="button"
+            onClick={() => void window.spool.resumeCapture()}
+            className="shrink-0 rounded border border-spool-thread/50 px-2 py-0.5"
+          >
+            Resume
+          </button>
+        </p>
       )}
 
       {!capture.available && capture.reason !== null && (

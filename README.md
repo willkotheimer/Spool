@@ -43,7 +43,13 @@ nested directory fails on Windows' 260-character path limit.
 
 ## Status
 
-M11 — starred spools: a star marks a spool you mean to keep. Starred spools sort to the top, survive
+M12 — the capacity floor: at 95% Spool stops accepting new copies and says so in the tray, offering
+the largest spools first, Pause capture, or Reset everything. It suspends capture and nothing else —
+every clip you already have stays readable, servable, and reorderable throughout — and capture
+resumes the moment enough space is free, with no restart. No starred spool is ever listed, and
+nothing asks you to unstar one.
+
+Underneath, M11 — starred spools: a star marks a spool you mean to keep. Starred spools sort to the top, survive
 Clear spools, and are never proposed when space runs short — no capacity state ever asks for a star
 back. Because that promise is unconditional, starring is capped at five and at half the store, and a
 star that would breach either is refused up front rather than revoked later.

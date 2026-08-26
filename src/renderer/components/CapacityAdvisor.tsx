@@ -10,7 +10,13 @@ import { formatBytes, lastUsedLabel } from '../helpers/CapacityHelper'
  * exactly the bytes the user was trying to free, so this says so plainly instead of offering a
  * reversal the encrypted store could not honour (PLAN.md 12).
  */
-export function CapacityAdvisor({ capacity }: { capacity: CapacityView }): JSX.Element {
+export function CapacityAdvisor({
+  capacity,
+  onOpenSettings
+}: {
+  capacity: CapacityView
+  onOpenSettings: () => void
+}): JSX.Element {
   const [selected, setSelected] = useState<string[]>([])
   const [confirming, setConfirming] = useState(false)
 
@@ -25,11 +31,31 @@ export function CapacityAdvisor({ capacity }: { capacity: CapacityView }): JSX.E
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center bg-spool-ink/80 p-4">
       <section className="flex max-h-full w-full max-w-lg flex-col rounded border border-spool-thread/50 bg-spool-ink p-4">
-        <h2 className="text-sm font-semibold text-spool-paper">Spool is almost out of space</h2>
+        <h2 className="text-sm font-semibold text-spool-paper">
+          {capacity.gated ? 'Spool is full' : 'Spool is almost out of space'}
+        </h2>
         <p className="mt-1 text-xs text-spool-paper/60">
-          You’ve used {capacity.description}. Deleting spools you have finished with frees space —
-          and either way, nothing leaves your computer.
+          {capacity.gated ? (
+            <>
+              You’ve used {capacity.description}, so new copies are not being kept. Everything
+              already here still works — you can serve, arrange, and read every clip exactly as
+              before. Free up {formatBytes(capacity.overFloorBytes)} and capture starts again at
+              once.
+            </>
+          ) : (
+            <>
+              You’ve used {capacity.description}. Deleting spools you have finished with frees
+              space — and either way, nothing leaves your computer.
+            </>
+          )}
         </p>
+
+        {capacity.gated && capacity.candidates.length > 0 && (
+          <p className="mt-2 text-[10px] text-spool-paper/35">
+            Largest first, since what matters here is space reclaimed. Starred spools are not listed
+            and will not be asked for.
+          </p>
+        )}
 
         {capacity.candidates.length === 0 ? (
           <p className="mt-3 text-xs text-spool-paper/50">
@@ -94,7 +120,7 @@ export function CapacityAdvisor({ capacity }: { capacity: CapacityView }): JSX.E
             </span>
           </div>
         ) : (
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
               disabled={selected.length === 0}
@@ -103,13 +129,35 @@ export function CapacityAdvisor({ capacity }: { capacity: CapacityView }): JSX.E
             >
               Delete selected
             </button>
-            <button
-              type="button"
-              onClick={() => void window.spool.dismissCapacityAdvice()}
-              className="rounded border border-spool-paper/20 px-3 py-1.5 text-xs text-spool-paper/70 hover:bg-spool-paper/10"
-            >
-              Not now
-            </button>
+
+            {capacity.gated ? (
+              <>
+                {/* The door that deletes nothing. A modal whose only exits destroy data is a
+                    data-loss hazard, and would read as hostile (PLAN.md 9). */}
+                <button
+                  type="button"
+                  onClick={() => void window.spool.pauseCapture()}
+                  className="rounded border border-spool-paper/20 px-3 py-1.5 text-xs text-spool-paper/70 hover:bg-spool-paper/10"
+                >
+                  Pause capture
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  className="rounded border border-spool-paper/20 px-3 py-1.5 text-xs text-spool-paper/50 hover:bg-spool-paper/10"
+                >
+                  Reset everything
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void window.spool.dismissCapacityAdvice()}
+                className="rounded border border-spool-paper/20 px-3 py-1.5 text-xs text-spool-paper/70 hover:bg-spool-paper/10"
+              >
+                Not now
+              </button>
+            )}
           </div>
         )}
       </section>
