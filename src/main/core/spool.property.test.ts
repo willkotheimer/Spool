@@ -84,21 +84,43 @@ function apply(spool: Spool, operation: Operation, sequence: number, reached: Re
   }
 }
 
+/**
+ * The invariants, checked after every single operation.
+ *
+ * **Deliberately not `expect()`.** A matcher costs far more than the check it wraps, and this runs
+ * something like a hundred thousand times per property — measured at M9, `expect` was the whole
+ * reason the property tests were slow enough to threaten the default timeout. Throwing a described
+ * error is what fast-check wants anyway: it catches the throw, shrinks the failing sequence, and
+ * reports it with the message below, which is more useful than a matcher diff of two spools.
+ */
 function checkInvariants(spool: Spool): void {
   // 1. The cursor is an identity that resolves, or null on an empty spool.
   if (spool.clips.length === 0) {
-    expect(spool.cursorClipId).toBeNull()
-  } else {
-    expect(spool.cursorClipId).not.toBeNull()
-    expect(spool.clips.some((clip) => clip.id === spool.cursorClipId)).toBe(true)
+    if (spool.cursorClipId !== null) {
+      throw new Error(`empty spool kept a cursor: ${spool.cursorClipId}`)
+    }
+  } else if (!spool.clips.some((clip) => clip.id === spool.cursorClipId)) {
+    throw new Error(
+      `cursor ${String(spool.cursorClipId)} points at no clip in [${spool.clips
+        .map((clip) => clip.id)
+        .join(', ')}]`
+    )
   }
 
   // 2. The cap holds, whether this spool rolls or refuses.
-  expect(spool.clips.length).toBeLessThanOrEqual(clipCap(spool.kind))
+  const cap = clipCap(spool.kind)
+  if (spool.clips.length > cap) {
+    throw new Error(`${spool.kind} spool holds ${spool.clips.length} clips, over its cap of ${cap}`)
+  }
 
   // Clips stay unique and the array stays dense, which is what the store relies on instead of a
-  // UNIQUE (spool_id, position) constraint (PLAN.md 7).
-  expect(new Set(spool.clips.map((clip) => clip.id)).size).toBe(spool.clips.length)
+  // UNIQUE (spool_id, position) constraint (PLAN.md 7). Counted with a Set only when the cheap
+  // length check cannot rule a duplicate out.
+  const seen = new Set<string>()
+  for (const clip of spool.clips) {
+    if (seen.has(clip.id)) throw new Error(`clip ${clip.id} appears twice`)
+    seen.add(clip.id)
+  }
 }
 
 /** A spool seeded anywhere from empty to full, so short runs still meet the cap. */
@@ -136,23 +158,15 @@ function runProperty(kind: SpoolKind): Reached {
   return reached
 }
 
-/**
- * Three hundred runs of up to three hundred operations is deliberately more work than a unit test,
- * and it can pass the five-second default while the rest of the suite is running in parallel and
- * fail it on a slower machine. The timeout is raised rather than the coverage lowered: a property
- * test that shrinks to fit a stopwatch stops being the thing the milestone asked for.
- */
-const PROPERTY_TIMEOUT_MS = 60_000
-
 describe('spool invariants over arbitrary operation sequences', () => {
-  it('hold for the default spool, which rolls at its cap', { timeout: PROPERTY_TIMEOUT_MS }, () => {
+  it('hold for the default spool, which rolls at its cap', () => {
     const reached = runProperty('default')
 
     expect(reached.eviction, 'the run never filled the buffer, so rolling went untested').toBe(true)
     expect(reached.empty).toBe(true)
   })
 
-  it('hold for a saved spool, which refuses at its cap', { timeout: PROPERTY_TIMEOUT_MS }, () => {
+  it('hold for a saved spool, which refuses at its cap', () => {
     const reached = runProperty('saved')
 
     expect(reached.refusal, 'the run never filled the spool, so refusing went untested').toBe(true)
@@ -161,7 +175,7 @@ describe('spool invariants over arbitrary operation sequences', () => {
 })
 
 describe('serving never removes a clip', () => {
-  it('leaves the clip list identical however many times it is served', { timeout: PROPERTY_TIMEOUT_MS }, () => {
+  it('leaves the clip list identical however many times it is served', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 40 }),
@@ -173,8 +187,8 @@ describe('serving never removes a clip', () => {
 
           for (let i = 0; i < serves; i++) {
             const result = serve(spool)
-            expect(result.ok).toBe(true)
-            if (result.ok) spool = result.spool
+            if (!result.ok) throw new Error('serving a spool with clips reported it empty')
+            spool = result.spool
           }
 
           expect(spool.clips.map((clip) => clip.id)).toEqual(before)
