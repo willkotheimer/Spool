@@ -73,6 +73,9 @@ const api = {
 
   /** The capacity advisor (PLAN.md 9): it recommends, the user decides. */
   dismissCapacityAdvice: (): Promise<void> => ipcRenderer.invoke(CHANNELS.dismissCapacityAdvice),
+  /** The door that deletes nothing (PLAN.md 9). */
+  pauseCapture: (): Promise<void> => ipcRenderer.invoke(CHANNELS.pauseCapture),
+  resumeCapture: (): Promise<void> => ipcRenderer.invoke(CHANNELS.resumeCapture),
   deleteSpools: (spoolIds: readonly string[]): Promise<void> =>
     ipcRenderer.invoke(CHANNELS.deleteSpools, spoolIds),
 

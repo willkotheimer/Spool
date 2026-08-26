@@ -24,10 +24,12 @@ import {
   STORE_BYTE_BUDGET
 } from './core/limits'
 import {
+  bytesOverFloor,
   closestMeasure,
   describeMeasure,
   rankCandidates,
   shouldAdvise,
+  shouldGate,
   type CapacityCandidate,
   type MeasureName
 } from './core/capacity'
@@ -100,6 +102,13 @@ export class Session {
   private snoozed = new Set<MeasureName>()
   private sizes: Array<{ spoolId: string; clips: number; bytes: number }> = []
   private storedBytes = 0
+
+  /**
+   * The user took the Pause capture door (PLAN.md 9). Deletes nothing: the listener simply stops
+   * until they resume or free space another way. It exists because a modal whose only exits
+   * destroy data is a data-loss hazard, and would read as hostile.
+   */
+  private paused = false
 
   /** Where state is written through to. Null means this session keeps nothing (PLAN.md 11, M6). */
   private store: Store | null = null
@@ -198,6 +207,28 @@ export class Session {
 
   /** Exposed for the IPC layer and for tests, which drive it with snapshots directly. */
   onClipboardChange(snapshot: ClipboardSnapshot): void {
+    // The floor, and the user's own pause. Both stop capture and nothing else: every stored clip
+    // stays readable, servable, and reorderable throughout (invariant 8).
+    if (this.paused) {
+      this.notice = {
+        category: 'unsupported',
+        message: 'Capture is paused. Your clips are all still here — resume when you are ready.'
+      }
+      this.publish()
+      return
+    }
+
+    if (this.atFloor()) {
+      this.notice = {
+        category: 'unsupported',
+        message:
+          'Spool is full, so new copies are not being kept. Everything already here still works — ' +
+          'delete a spool or two, or pause capture.'
+      }
+      this.publish()
+      return
+    }
+
     // A starred spool that has reached the reserve stops accepting clips (PLAN.md 10). It refuses
     // and says so, exactly as a saved spool does at its clip cap, and deletes nothing.
     if (this.state.spool.isStarred && starredReserveReached(this.starrable())) {
@@ -566,8 +597,35 @@ export class Session {
     this.otherSpools = this.otherSpools.filter((spool) => !removable.includes(spool.id))
     this.store?.deleteSpools(removable)
     this.capacityPrompt = null
+    // Recounting is what lifts the gate: enough deleted, and capture is on again at once.
     this.refreshCapacity()
     this.publish()
+  }
+
+  /**
+   * Pause capture (PLAN.md 9): the door that deletes nothing.
+   *
+   * The listener stops and the tray says so, until the user resumes or frees space another way.
+   */
+  pauseCapture(): void {
+    this.paused = true
+    this.capacityPrompt = null
+    this.publish()
+  }
+
+  /** Resume, whether it was paused deliberately or the store simply dropped back under. */
+  resumeCapture(): void {
+    this.paused = false
+    this.publish()
+  }
+
+  isPaused(): boolean {
+    return this.paused
+  }
+
+  /** Whether the store has reached the floor, where capture stops (PLAN.md 9). */
+  private atFloor(): boolean {
+    return shouldGate(closestMeasure(this.capacitySnapshot()))
   }
 
   /** Not now: nothing is deleted, and this measure stays quiet until the floor (PLAN.md 9). */
@@ -652,6 +710,17 @@ export class Session {
     this.storedBytes = this.store.storeBytes()
 
     const measure = closestMeasure(this.capacitySnapshot())
+
+    if (shouldGate(measure)) {
+      // The floor ignores the snooze: dismissing at 90% buys quiet until here, and no further.
+      // Pausing is what closes this one, and freeing space is what ends it.
+      if (!this.paused) this.capacityPrompt = measure.name
+      return
+    }
+
+    // Back under the floor: capture resumes at once, with no restart, however it was stopped.
+    if (this.paused) this.paused = false
+
     if (shouldAdvise(measure) && !this.snoozed.has(measure.name)) {
       this.capacityPrompt = measure.name
     }
@@ -787,7 +856,10 @@ export class Session {
   /** What the modal and the Storage panel both read (PLAN.md 9). */
   private capacityView() {
     const measure = closestMeasure(this.capacitySnapshot())
-    const ranked = rankCandidates(this.capacityCandidates())
+    const gated = shouldGate(measure)
+    // At the floor the question is what frees the most, fastest; at 90% it is what the user has
+    // finished with. That difference in ordering is the point (PLAN.md 9).
+    const ranked = rankCandidates(this.capacityCandidates(), gated ? 'largest' : 'oldest_used')
 
     return {
       measure: measure.name,
@@ -796,6 +868,9 @@ export class Session {
       ratio: measure.ratio,
       description: describeMeasure(measure),
       advising: shouldAdvise(measure),
+      gated,
+      paused: this.paused,
+      overFloorBytes: bytesOverFloor(this.storedBytes, STORE_BYTE_BUDGET),
       prompting: this.capacityPrompt !== null,
       candidates: ranked.map((candidate) => ({
         id: candidate.id,

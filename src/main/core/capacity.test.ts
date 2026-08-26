@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   ADVISE_AT,
+  GATE_AT,
+  bytesOverFloor,
   closestMeasure,
   describeMeasure,
   freedBy,
   measures,
   rankCandidates,
   shouldAdvise,
+  shouldGate,
   type CapacityCandidate
 } from './capacity'
 import { SAVED_SPOOL_CAP, SAVED_SPOOL_CLIP_CAP, STORE_BYTE_BUDGET } from './limits'
@@ -141,5 +144,64 @@ describe('the running total (PLAN.md 9)', () => {
       spools: 1,
       bytes: 30 * MIB
     })
+  })
+})
+
+describe('the floor at 95% (PLAN.md 9)', () => {
+  it('gates only once the floor is reached', () => {
+    expect(shouldGate(closestMeasure({ ...empty, storeBytes: STORE_BYTE_BUDGET * 0.94 }))).toBe(
+      false
+    )
+    expect(shouldGate(closestMeasure({ ...empty, storeBytes: STORE_BYTE_BUDGET * GATE_AT }))).toBe(
+      true
+    )
+  })
+
+  it('advises before it gates, so the wall is never the first news', () => {
+    const advising = closestMeasure({ ...empty, storeBytes: STORE_BYTE_BUDGET * 0.91 })
+
+    expect(shouldAdvise(advising)).toBe(true)
+    expect(shouldGate(advising)).toBe(false)
+  })
+
+  it('says how much has to go to get back under', () => {
+    const over = STORE_BYTE_BUDGET * 0.97
+
+    expect(bytesOverFloor(over, STORE_BYTE_BUDGET)).toBe(
+      Math.ceil(over - STORE_BYTE_BUDGET * GATE_AT)
+    )
+    expect(bytesOverFloor(STORE_BYTE_BUDGET * 0.5, STORE_BYTE_BUDGET)).toBe(0)
+  })
+
+  it('orders candidates largest first at the floor, where bytes matter more than clutter', () => {
+    const ranked = rankCandidates(
+      [
+        candidate({ id: 'tiny', bytes: 1 * MIB, lastUsedAt: '2020-01-01T00:00:00.000Z' }),
+        candidate({ id: 'vast', bytes: 200 * MIB, lastUsedAt: '2026-08-25T00:00:00.000Z' })
+      ],
+      'largest'
+    )
+
+    expect(ranked.map((c) => c.id)).toEqual(['vast', 'tiny'])
+  })
+
+  it('is solvable with five starred spools sitting exactly at the reserve', () => {
+    // The arithmetic of PLAN.md 10: starred is capped at half the budget, the floor is at 95%, so
+    // at least 45% of the budget is non-starred and therefore reclaimable — always.
+    const reserve = STORE_BYTE_BUDGET / 2
+    const atFloor = STORE_BYTE_BUDGET * GATE_AT
+    const nonStarred = atFloor - reserve
+
+    // Five starred spools holding the whole reserve, and the rest in ordinary ones.
+    const deletable = Array.from({ length: 9 }, (_, i) =>
+      candidate({ id: `plain-${i}`, bytes: nonStarred / 9 })
+    )
+    const ranked = rankCandidates(deletable, 'largest')
+    const reclaimable = ranked.reduce((total, c) => total + c.bytes, 0)
+
+    // Rounded to whole bytes: writing the percentages as decimals leaves the two sides a
+    // fraction of a byte apart, which says nothing about the reserve.
+    expect(Math.round(reclaimable)).toBeGreaterThanOrEqual(Math.round(STORE_BYTE_BUDGET * 0.45))
+    expect(reclaimable).toBeGreaterThanOrEqual(bytesOverFloor(atFloor, STORE_BYTE_BUDGET))
   })
 })

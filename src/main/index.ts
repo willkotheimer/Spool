@@ -9,7 +9,7 @@ import { registerIpc } from './ipc'
 import { Session } from './session'
 import { explainStorageFailure, openStore, resetEverything, startFresh, storePaths } from './store'
 import { writeClipboardText } from './clipboard/writer'
-import { createTray } from './tray'
+import { createTray, reportCaptureState } from './tray'
 import { loadSettings, saveSettings, settingsPath, type WindowState } from './settings'
 import {
   createCompactWindow,
@@ -109,6 +109,15 @@ if (!app.requestSingleInstanceLock()) {
 
     // Watching starts once there is a window to report to, so a failure to load the addon is
     // visible rather than lost to a console nobody is reading (PLAN.md 8).
+    // Keep the tray honest about whether anything is being captured (PLAN.md 11, M12).
+    spoolSession.onChange((state) =>
+      reportCaptureState({
+        gated: state.capacity.gated,
+        paused: state.capacity.paused,
+        available: state.capture.available
+      })
+    )
+
     spoolSession.startCapture()
     app.on('will-quit', () => spoolSession.stopCapture())
 

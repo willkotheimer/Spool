@@ -36,6 +36,9 @@ const initialState: AppState = {
     ratio: 0,
     description: '',
     advising: false,
+    gated: false,
+    paused: false,
+    overFloorBytes: 0,
     prompting: false,
     candidates: []
   }

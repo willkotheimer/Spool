@@ -143,6 +143,15 @@ export interface CapacityView {
   readonly description: string
   /** True once the closest measure has reached 90% (PLAN.md 9). */
   readonly advising: boolean
+  /**
+   * True once the closest measure has reached 95%, where capture — and only capture — stops
+   * (PLAN.md 9). Reading, serving, and reordering are untouched: invariant 8.
+   */
+  readonly gated: boolean
+  /** The user took the Pause capture door. Nothing was deleted; the listener is simply off. */
+  readonly paused: boolean
+  /** How much has to go to get back under the floor. */
+  readonly overFloorBytes: number
   /** Whether the modal is up. Dismissing snoozes the measure rather than hiding it forever. */
   readonly prompting: boolean
   readonly candidates: readonly CapacityCandidateView[]
@@ -186,6 +195,8 @@ export const CHANNELS = {
   setConsentTimeout: 'spool:set-consent-timeout',
   resetEverything: 'spool:reset-everything',
   dismissCapacityAdvice: 'spool:dismiss-capacity-advice',
+  pauseCapture: 'spool:pause-capture',
+  resumeCapture: 'spool:resume-capture',
   deleteSpools: 'spool:delete-spools',
   setStarred: 'spool:set-starred',
   clearSpools: 'spool:clear-spools',
