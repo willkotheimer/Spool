@@ -1052,7 +1052,8 @@ the same figures on demand. The v1 → v2 migration is tested against a database
 
 ### M11 — Starred spools
 
-**In scope** — `is_starred` as `schema_version = 3` with a forward migration; star and unstar;
+**In scope** — `is_starred` with a forward migration — `schema_version = 4` in the end, after M9's
+retention column and M10's `last_used_at` (§7); star and unstar;
 starred-first ordering in every list; the starred count and 50%-reserve ceilings from §3 Limits,
 including refusing capture into a starred spool at the reserve; **Clear spools** sparing
 starred, with the spared count stated on the button; starred spools excluded from the 90%

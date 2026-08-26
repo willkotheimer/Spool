@@ -28,6 +28,8 @@ declare global {
     setConsentTimeout(seconds: number): Promise<void>
     resetEverything(): Promise<{ failed: Array<{ path: string; reason: string }> }>
     dismissCapacityAdvice(): Promise<void>
+    setStarred(spoolId: string, starred: boolean): Promise<void>
+    clearSpools(): Promise<void>
     deleteSpools(spoolIds: readonly string[]): Promise<void>
     clearSpool(spoolId: string): Promise<void>
     onState(listener: (state: AppState) => void): () => void

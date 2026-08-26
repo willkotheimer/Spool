@@ -74,6 +74,10 @@ export function registerIpc(
   )
   ipcMain.handle(CHANNELS.resetEverything, () => actions.resetEverything())
   ipcMain.handle(CHANNELS.dismissCapacityAdvice, () => session.dismissCapacityAdvice())
+  ipcMain.handle(CHANNELS.setStarred, (_event, spoolId: string, starred: boolean) =>
+    session.setStarred(spoolId, starred)
+  )
+  ipcMain.handle(CHANNELS.clearSpools, () => session.clearSpools())
   ipcMain.handle(CHANNELS.deleteSpools, (_event, spoolIds: string[]) =>
     session.deleteSpools(spoolIds)
   )
@@ -106,6 +110,8 @@ export function registerIpc(
     ipcMain.removeHandler(CHANNELS.setConsentTimeout)
     ipcMain.removeHandler(CHANNELS.resetEverything)
     ipcMain.removeHandler(CHANNELS.dismissCapacityAdvice)
+    ipcMain.removeHandler(CHANNELS.setStarred)
+    ipcMain.removeHandler(CHANNELS.clearSpools)
     ipcMain.removeHandler(CHANNELS.deleteSpools)
     ipcMain.removeHandler(CHANNELS.clearSpool)
     unsubscribe()

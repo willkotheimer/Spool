@@ -1,5 +1,6 @@
 import { useState, type JSX } from 'react'
 import type { SpoolSummary } from '../../shared/ipc'
+import { clearSpoolsLabel } from '../helpers/SpoolSidebarHelper'
 
 /**
  * The spool list (PLAN.md 8): switch which spool captures and is arranged, make one, rename one,
@@ -59,6 +60,7 @@ export function SpoolSidebar({ spools }: { spools: readonly SpoolSummary[] }): J
                   ].join(' ')}
                 >
                   <span className="truncate">
+                    {spool.isStarred && <span className="mr-1 text-spool-thread">*</span>}
                     {spool.name}
                     {spool.isActive && <span className="ml-1.5 text-[10px] text-spool-thread">active</span>}
                   </span>
@@ -66,6 +68,16 @@ export function SpoolSidebar({ spools }: { spools: readonly SpoolSummary[] }): J
                 </button>
 
                 <div className="mt-0.5 flex gap-1 px-1.5 text-[10px] text-spool-paper/40">
+                  {/* Starring is the commitment and can be refused; unstarring never asks. */}
+                  {!spool.isDefault && (
+                    <button
+                      type="button"
+                      onClick={() => void window.spool.setStarred(spool.id, !spool.isStarred)}
+                      className="hover:text-spool-paper"
+                    >
+                      {spool.isStarred ? 'Unstar' : 'Star'}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -86,6 +98,7 @@ export function SpoolSidebar({ spools }: { spools: readonly SpoolSummary[] }): J
                   </button>
                   {/* No Delete for the default spool: something has to catch the next copy. */}
                   {!spool.isDefault &&
+                    !spool.isStarred &&
                     (confirmingDelete === spool.id ? (
                       <>
                         <span className="text-spool-thread">
@@ -124,6 +137,18 @@ export function SpoolSidebar({ spools }: { spools: readonly SpoolSummary[] }): J
           </li>
         ))}
       </ul>
+
+      {/* Two clearing commands, worded so they cannot be mistaken for each other (PLAN.md 10).
+          This is the everyday one; Reset everything lives in Settings. */}
+      {clearSpoolsLabel(spools) !== null && (
+        <button
+          type="button"
+          onClick={() => void window.spool.clearSpools()}
+          className="w-full rounded border border-spool-paper/20 px-2 py-1 text-spool-paper/70 hover:bg-spool-paper/10"
+        >
+          {clearSpoolsLabel(spools)}
+        </button>
+      )}
 
       <form
         className="flex gap-1"

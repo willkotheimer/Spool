@@ -80,6 +80,13 @@ const V2 = `ALTER TABLE spools ADD COLUMN retention_hours INTEGER;`
  */
 const V3 = `ALTER TABLE spools ADD COLUMN last_used_at TEXT;`
 
+/**
+ * A star marks a spool the user means to keep (PLAN.md 10). Default zero, so every spool that
+ * predates the column arrives unstarred — the safe answer, since a star is a promise the app then
+ * has to honour.
+ */
+const V4 = `ALTER TABLE spools ADD COLUMN is_starred INTEGER NOT NULL DEFAULT 0;`
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -92,6 +99,10 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     version: 3,
     up: (database) => database.exec(V3)
+  },
+  {
+    version: 4,
+    up: (database) => database.exec(V4)
   }
 ]
 
