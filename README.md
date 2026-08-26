@@ -43,7 +43,12 @@ nested directory fails on Windows' 260-character path limit.
 
 ## Status
 
-M10 — the capacity advisor: when the store approaches its 512 MB budget, Spool offers a list of
+M11 — starred spools: a star marks a spool you mean to keep. Starred spools sort to the top, survive
+Clear spools, and are never proposed when space runs short — no capacity state ever asks for a star
+back. Because that promise is unconditional, starring is capped at five and at half the store, and a
+star that would breach either is refused up front rather than revoked later.
+
+Underneath, M10 — the capacity advisor: when the store approaches its 512 MB budget, Spool offers a list of
 spools you have finished with — oldest used first, never the default or the one you are working in —
 with sizes, a running total of what deleting them frees, and a Not now that means it. Nothing is ever
 deleted that you did not check. The same figures live permanently in Settings under Storage.

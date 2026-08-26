@@ -529,7 +529,8 @@ describe('persistence (PLAN.md 11, M6)', () => {
       ],
       cursorClipId: 'b',
       retentionHours: null,
-      lastUsedAt: null
+      lastUsedAt: null,
+      isStarred: false
     }
 
     const { session } = started()
@@ -923,7 +924,8 @@ describe('the capacity advisor (PLAN.md 9)', () => {
     ],
     cursorClipId: `${id}-clip`,
     retentionHours: null,
-    lastUsedAt
+    lastUsedAt,
+    isStarred: false
   })
 
   const defaultSpool: Spool = {
@@ -934,7 +936,8 @@ describe('the capacity advisor (PLAN.md 9)', () => {
     clips: [],
     cursorClipId: null,
     retentionHours: null,
-    lastUsedAt: null
+    lastUsedAt: null,
+    isStarred: false
   }
 
   /** A store seeded past ninety per cent of the byte budget. */
@@ -1062,5 +1065,200 @@ describe('the capacity advisor (PLAN.md 9)', () => {
     const created = session.getState().spools.find((s) => s.name === 'Just made')
     expect(created).toBeDefined()
     expect(before).toBeDefined()
+  })
+})
+
+describe('starred spools (PLAN.md 10)', () => {
+  const MIB = 1024 * 1024
+  const names = (session: Session) => session.getState().spools.map((s) => s.name)
+  const starred = (session: Session) =>
+    session.getState().spools.filter((s) => s.isStarred).map((s) => s.name)
+
+  /** A saved spool of a given size, as the store would report it. */
+  const sized = (id: string, name: string, bytes: number): Spool => ({
+    id,
+    name,
+    kind: 'saved',
+    mode: 'fifo',
+    clips: [
+      {
+        id: `${id}-clip`,
+        content: 'x',
+        preview: 'x',
+        byteLength: bytes,
+        sourceApp: null,
+        wasFlagged: false,
+        capturedAt: '2026-08-01T00:00:00.000Z'
+      }
+    ],
+    cursorClipId: `${id}-clip`,
+    retentionHours: null,
+    lastUsedAt: '2026-08-01T00:00:00.000Z',
+    isStarred: false
+  })
+
+  const withSpools = (spools: Spool[], bytes = 0) => {
+    const { session } = started()
+    const fake = fakeStore({ spools, bytes })
+    session.attachStore(fake.store)
+    return { session, saved: fake.saved }
+  }
+
+  const defaultSpool: Spool = {
+    id: 'default',
+    name: 'Default spool',
+    kind: 'default',
+    mode: 'fifo',
+    clips: [],
+    cursorClipId: null,
+    retentionHours: null,
+    lastUsedAt: null,
+    isStarred: false
+  }
+
+  it('moves a starred spool to the top of the list', () => {
+    const { session } = withSpools([
+      defaultSpool,
+      sized('a', 'Alpha', MIB),
+      sized('b', 'Beta', MIB),
+      sized('c', 'Gamma', MIB)
+    ])
+
+    session.setStarred('c', true)
+
+    // The default spool stays first; the star sorts above the unstarred rest.
+    expect(names(session)).toEqual(['Default spool', 'Gamma', 'Alpha', 'Beta'])
+  })
+
+  it('refuses the sixth star, naming the limit and deleting nothing', () => {
+    const spools = [
+      defaultSpool,
+      ...Array.from({ length: 5 }, (_, i) => ({ ...sized(`s${i}`, `Starred ${i}`, MIB), isStarred: true })),
+      sized('hopeful', 'Hopeful', MIB)
+    ]
+    const { session } = withSpools(spools)
+
+    session.setStarred('hopeful', true)
+
+    expect(starred(session)).toHaveLength(5)
+    expect(session.getState().notice?.message).toMatch(/5 spools are already starred/i)
+    expect(names(session)).toContain('Hopeful')
+  })
+
+  it('refuses a star that would push starred bytes past the reserve', () => {
+    const reserve = 256 * MIB
+    const { session } = withSpools([
+      defaultSpool,
+      { ...sized('big', 'Big', reserve - 10 * MIB), isStarred: true },
+      sized('hopeful', 'Hopeful', 40 * MIB)
+    ])
+
+    session.setStarred('hopeful', true)
+
+    expect(starred(session)).toEqual(['Big'])
+    expect(session.getState().notice?.message).toMatch(/half the space/i)
+    expect(session.getState().notice?.message).toMatch(/nothing has been deleted/i)
+  })
+
+  it('refuses to star the default spool', () => {
+    const { session } = withSpools([defaultSpool, sized('a', 'Alpha', MIB)])
+
+    session.setStarred('default', true)
+
+    expect(starred(session)).toEqual([])
+    expect(session.getState().notice?.message).toMatch(/buffer/i)
+  })
+
+  it('unstars without asking anything', () => {
+    const { session } = withSpools([
+      defaultSpool,
+      { ...sized('a', 'Alpha', MIB), isStarred: true }
+    ])
+
+    session.setStarred('a', false)
+
+    expect(starred(session)).toEqual([])
+    // No prompt, no confirmation, no notice to dismiss.
+    expect(session.getState().prompt).toBeNull()
+  })
+
+  it('Clear spools deletes the unstarred and spares the starred', () => {
+    const { session, saved } = withSpools([
+      defaultSpool,
+      { ...sized('keep', 'Keep me', MIB), isStarred: true },
+      sized('go1', 'Go one', MIB),
+      sized('go2', 'Go two', MIB)
+    ])
+
+    session.clearSpools()
+
+    expect(names(session)).toEqual(['Default spool', 'Keep me'])
+    expect(saved.deletedBatches).toEqual([['go1', 'go2']])
+  })
+
+  it('never offers a starred spool to the capacity advisor', () => {
+    const { session } = withSpools(
+      [
+        defaultSpool,
+        { ...sized('starred', 'Starred', 200 * MIB), isStarred: true },
+        sized('plain', 'Plain', 200 * MIB)
+      ],
+      470 * MIB
+    )
+
+    const { candidates } = session.getState().capacity
+    expect(candidates.map((c) => c.name)).toEqual(['Plain'])
+  })
+
+  it('will not mass delete a starred spool even when handed its id', () => {
+    const { session, saved } = withSpools([
+      defaultSpool,
+      { ...sized('starred', 'Starred', MIB), isStarred: true },
+      sized('plain', 'Plain', MIB)
+    ])
+
+    session.deleteSpools(['starred', 'plain'])
+
+    expect(names(session)).toContain('Starred')
+    expect(saved.deletedBatches).toEqual([['plain']])
+  })
+
+  it('refuses capture into a starred spool that has reached the reserve, and says why', () => {
+    const reserve = 256 * MIB
+    const { session, watcher } = (() => {
+      const s = started()
+      const fake = fakeStore({
+        spools: [defaultSpool, { ...sized('full', 'Full', reserve), isStarred: true }],
+        bytes: reserve
+      })
+      s.session.attachStore(fake.store)
+      return s
+    })()
+
+    session.setActiveSpool('full')
+    const before = session.getState().spool.count
+
+    watcher.change(text('a clip that will not fit the promise'))
+
+    expect(session.getState().spool.count).toBe(before)
+    expect(session.getState().notice?.message).toMatch(/starred spools may hold/i)
+    expect(session.getState().notice?.message).toMatch(/nothing was deleted/i)
+  })
+
+  it('captures normally into a starred spool below the reserve', () => {
+    const { session, watcher } = (() => {
+      const s = started()
+      const fake = fakeStore({
+        spools: [defaultSpool, { ...sized('small', 'Small', MIB), isStarred: true }],
+        bytes: MIB
+      })
+      s.session.attachStore(fake.store)
+      return s
+    })()
+
+    session.setActiveSpool('small')
+    watcher.change(text('an ordinary clip'))
+
+    expect(session.getState().spool.clips.map((c) => c.preview)).toContain('an ordinary clip')
   })
 })

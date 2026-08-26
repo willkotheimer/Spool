@@ -198,8 +198,8 @@ describe('migrations (PLAN.md 7)', () => {
     expect(pendingMigrations(0).map((m) => m.version)).toEqual(
       MIGRATIONS.map((migration) => migration.version)
     )
-    expect(pendingMigrations(1).map((m) => m.version)).toEqual([2, 3])
-    expect(pendingMigrations(2).map((m) => m.version)).toEqual([3])
+    expect(pendingMigrations(1).map((m) => m.version)).toEqual([2, 3, 4])
+    expect(pendingMigrations(3).map((m) => m.version)).toEqual([4])
     expect(pendingMigrations(CURRENT_SCHEMA_VERSION)).toEqual([])
   })
 
@@ -210,6 +210,7 @@ describe('migrations (PLAN.md 7)', () => {
     first.database.prepare('DELETE FROM spools').run()
     first.database.exec('ALTER TABLE spools DROP COLUMN retention_hours')
     first.database.exec('ALTER TABLE spools DROP COLUMN last_used_at')
+    first.database.exec('ALTER TABLE spools DROP COLUMN is_starred')
     first.database.prepare('UPDATE meta SET schema_version = 1').run()
     saveSpoolV1(first.database, 'kept', 'Kept from v1')
     first.database
@@ -222,7 +223,7 @@ describe('migrations (PLAN.md 7)', () => {
     first.database.close()
 
     const upgraded = open()
-    expect(upgraded.migrated).toEqual([2, 3])
+    expect(upgraded.migrated).toEqual([2, 3, 4])
     expect(schemaVersion(upgraded.database)).toBe(CURRENT_SCHEMA_VERSION)
 
     const [spool] = loadSpools(upgraded.database)
@@ -234,6 +235,38 @@ describe('migrations (PLAN.md 7)', () => {
     // Columns added since default to null, which is what every rule reading them expects.
     expect(spool.retentionHours).toBeNull()
     expect(spool.lastUsedAt).toBeNull()
+    // Unstarred is the safe default for a spool that predates the column: a star is a promise the
+    // app then has to honour, and one nobody made should not appear (PLAN.md 10).
+    expect(spool.isStarred).toBe(false)
+  })
+
+  it('upgrades a file written by the version M10 shipped', () => {
+    // v3 — everything up to and including last_used_at, which is what M10 left behind.
+    const first = open()
+    first.database.prepare('DELETE FROM spools').run()
+    first.database.exec('ALTER TABLE spools DROP COLUMN is_starred')
+    first.database.prepare('UPDATE meta SET schema_version = 3').run()
+    first.database
+      .prepare(
+        `INSERT INTO spools
+           (id, name, mode, cursor_clip_id, is_default, retention_hours, last_used_at,
+            created_at, updated_at)
+         VALUES ('kept', 'Kept from v3', 'lifo', NULL, 0, 24, ?, ?, ?)`
+      )
+      .run(NOW, NOW, NOW)
+    first.database.close()
+
+    const upgraded = open()
+    expect(upgraded.migrated).toEqual([4])
+
+    const [spool] = loadSpools(upgraded.database)
+    upgraded.database.close()
+
+    expect(spool.name).toBe('Kept from v3')
+    expect(spool.mode).toBe('lifo')
+    expect(spool.retentionHours).toBe(24)
+    expect(spool.lastUsedAt).toBe(NOW)
+    expect(spool.isStarred).toBe(false)
   })
 })
 

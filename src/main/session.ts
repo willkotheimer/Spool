@@ -32,6 +32,13 @@ import {
   type MeasureName
 } from './core/capacity'
 import { expireClips, isRetentionHours } from './core/retention'
+import {
+  canStar,
+  clearableSpools,
+  starredFirst,
+  starredReserveReached,
+  type StarrableSpool
+} from './core/starring'
 import { arrange, clear, createSpool, deleteClip, serve, setMode } from './core/spool'
 import type { Clip, Mode, Spool } from './core/types'
 import type { ClipboardSnapshot } from './detect/admit'
@@ -191,6 +198,19 @@ export class Session {
 
   /** Exposed for the IPC layer and for tests, which drive it with snapshots directly. */
   onClipboardChange(snapshot: ClipboardSnapshot): void {
+    // A starred spool that has reached the reserve stops accepting clips (PLAN.md 10). It refuses
+    // and says so, exactly as a saved spool does at its clip cap, and deletes nothing.
+    if (this.state.spool.isStarred && starredReserveReached(this.starrable())) {
+      this.notice = {
+        category: 'unsupported',
+        message:
+          'This starred spool has reached the half of your space that starred spools may hold. ' +
+          'Nothing was deleted — unstar it, or capture into another spool.'
+      }
+      this.publish()
+      return
+    }
+
     const outcome = captureSnapshot(this.state, snapshot, this.deps)
 
     this.absorb(outcome)
@@ -354,7 +374,8 @@ export class Session {
       clips: copied,
       cursorClipId: copied[0]?.id ?? null,
       retentionHours: null,
-      lastUsedAt: new Date().toISOString()
+      lastUsedAt: new Date().toISOString(),
+      isStarred: false
     }
 
     this.otherSpools = [...this.otherSpools, created]
@@ -531,7 +552,14 @@ export class Session {
   deleteSpools(spoolIds: readonly string[]): void {
     const removable = spoolIds.filter((id) => {
       const spool = this.allSpools().find((candidate) => candidate.id === id)
-      return spool !== undefined && spool.kind !== 'default' && spool.id !== this.state.spool.id
+      return (
+        spool !== undefined &&
+        spool.kind !== 'default' &&
+        // Starred spools are not deletable this way. Only the user unstars, and only Reset
+        // everything overrides it (PLAN.md 10).
+        !spool.isStarred &&
+        spool.id !== this.state.spool.id
+      )
     })
     if (removable.length === 0) return
 
@@ -546,6 +574,57 @@ export class Session {
   dismissCapacityAdvice(): void {
     if (this.capacityPrompt !== null) this.snoozed.add(this.capacityPrompt)
     this.capacityPrompt = null
+    this.publish()
+  }
+
+  /**
+   * Star or unstar a spool (PLAN.md 10).
+   *
+   * Starring is the commitment and can be refused — by the five-star cap, by the reserve, or
+   * because it is the default spool — always with a message naming the limit and never deleting
+   * anything. **Unstarring is always available and never asks for confirmation**: releasing a
+   * promise is not the same act as making one.
+   */
+  setStarred(spoolId: string, starred: boolean): void {
+    const target = this.allSpools().find((spool) => spool.id === spoolId)
+    if (target === undefined || target.isStarred === starred) return
+
+    if (starred) {
+      const decision = canStar(this.starrable(), spoolId)
+      if (!decision.ok) {
+        this.notice = { category: 'unsupported', message: decision.message }
+        this.publish()
+        return
+      }
+    }
+
+    this.replaceSpool(spoolId, (spool) => ({ ...spool, isStarred: starred }))
+    this.publish()
+  }
+
+  /**
+   * Clear spools: deletes unstarred spools and spares the starred ones (PLAN.md 10).
+   *
+   * The everyday command, as distinct from Reset everything — which is the only operation that
+   * touches a starred spool without it being unstarred first.
+   */
+  clearSpools(): void {
+    const { clearing } = clearableSpools(
+      this.allSpools().map((spool) => ({
+        id: spool.id,
+        isStarred: spool.isStarred,
+        isDefault: spool.kind === 'default'
+      }))
+    )
+
+    const removable = clearing
+      .map((spool) => spool.id)
+      .filter((id) => id !== this.state.spool.id)
+    if (removable.length === 0) return
+
+    this.otherSpools = this.otherSpools.filter((spool) => !removable.includes(spool.id))
+    this.store?.deleteSpools(removable)
+    this.refreshCapacity()
     this.publish()
   }
 
@@ -599,7 +678,9 @@ export class Session {
         bytes:
           size?.bytes ?? spool.clips.reduce((total, clip) => total + clip.byteLength, 0),
         lastUsedAt: spool.lastUsedAt,
-        isDefault: spool.kind === 'default',
+        // A starred spool is never a candidate, at any threshold: the app does not ask for a
+        // promise back under pressure (PLAN.md 10).
+        isDefault: spool.kind === 'default' || spool.isStarred,
         isActive: spool.id === this.state.spool.id
       }
     })
@@ -608,6 +689,36 @@ export class Session {
   /** Mark a spool as used now, which is what the advisor ranks by (PLAN.md 9). */
   private touch(spool: Spool): Spool {
     return { ...spool, lastUsedAt: new Date().toISOString() }
+  }
+
+  /** Every spool with what it holds, which is what the star rules are measured against. */
+  private starrable(): StarrableSpool[] {
+    const sizeOf = new Map(this.sizes.map((size) => [size.spoolId, size.bytes]))
+
+    return this.allSpools().map((spool) => ({
+      id: spool.id,
+      isDefault: spool.kind === 'default',
+      isStarred: spool.isStarred,
+      bytes:
+        sizeOf.get(spool.id) ??
+        spool.clips.reduce((total, clip) => total + clip.byteLength, 0)
+    }))
+  }
+
+  /** Edit one spool, whether it is the active one or not, and write it through. */
+  private replaceSpool(spoolId: string, change: (spool: Spool) => Spool): void {
+    if (spoolId === this.state.spool.id) {
+      this.state = { ...this.state, spool: change(this.state.spool) }
+      this.store?.saveSpool(this.state.spool)
+      this.savedSpool = this.state.spool
+      return
+    }
+
+    this.otherSpools = this.otherSpools.map((spool) =>
+      spool.id === spoolId ? change(spool) : spool
+    )
+    const changed = this.otherSpools.find((spool) => spool.id === spoolId)
+    if (changed !== undefined) this.store?.saveSpool(changed)
   }
 
   private allSpools(): Spool[] {
@@ -637,16 +748,17 @@ export class Session {
       capture: this.capture,
       storage: this.storage,
       separator: this.settings.separator,
-      spools: this.allSpools()
-        .map((spool) => ({
+      spools: starredFirst(
+        this.allSpools().map((spool) => ({
           id: spool.id,
           name: spool.name,
           count: spool.clips.length,
           isActive: spool.id === this.state.spool.id,
           isDefault: spool.kind === 'default',
-          retentionHours: spool.retentionHours
+          retentionHours: spool.retentionHours,
+          isStarred: spool.isStarred
         }))
-        .sort((a, b) => (a.isDefault === b.isDefault ? 0 : a.isDefault ? -1 : 1)),
+      ),
       pendingJoin:
         this.pendingJoin === null
           ? null

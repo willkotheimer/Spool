@@ -45,6 +45,11 @@ export interface Spool {
    * not been used since the column arrived, which the advisor treats as oldest.
    */
   readonly lastUsedAt: string | null
+  /**
+   * Marked to survive routine clearing, and never proposed by any capacity state (PLAN.md 10).
+   * Only the user unstars, and only Reset everything overrides it.
+   */
+  readonly isStarred: boolean
 }
 
 /** Why a capture did not happen. Every one of these is something the user is told (PLAN.md 3). */
