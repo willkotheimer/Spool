@@ -1,6 +1,7 @@
 import { useState, type JSX } from 'react'
 import { capacityLabel } from '../helpers/ClipListHelper'
 import { useAppState } from '../state/useAppState'
+import { CapacityAdvisor } from './CapacityAdvisor'
 import { ClipList } from './ClipList'
 import { ExpandedView } from './ExpandedView'
 import { ConsentPrompt } from './ConsentPrompt'
@@ -26,7 +27,17 @@ export function App(): JSX.Element {
   const [showSettings, setShowSettings] = useState(false)
   const { summonHotkey, serveHotkey, pasteAllHotkey, modeHotkey, platform } = window.spool
   const state = useAppState()
-  const { spool, notice, capture, prompt, privacy, storage } = state
+  const { spool, notice, capture, prompt, privacy, storage, capacity } = state
+
+  // The advisor is raised over whatever is on screen: it is a prompt about the whole store, not
+  // about the view the user happens to be in (PLAN.md 9).
+  if (capacity.prompting) {
+    return (
+      <div className="relative h-full">
+        <CapacityAdvisor capacity={capacity} />
+      </div>
+    )
+  }
 
   if (expanded) {
     return (

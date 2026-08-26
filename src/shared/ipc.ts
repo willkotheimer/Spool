@@ -121,6 +121,31 @@ export interface PendingJoin {
   readonly clips: number
 }
 
+/** One spool the advisor is offering to delete (PLAN.md 9). */
+export interface CapacityCandidateView {
+  readonly id: string
+  readonly name: string
+  readonly clips: number
+  readonly bytes: number
+  readonly lastUsedAt: string | null
+}
+
+/** What the capacity advisor knows, for the modal and the permanent Storage panel (PLAN.md 9). */
+export interface CapacityView {
+  /** The measure closest to its cap — the one the modal names. */
+  readonly measure: 'bytes' | 'spools' | 'clips'
+  readonly used: number
+  readonly cap: number
+  readonly ratio: number
+  /** The measure in words: "461 MB of the 512 MB this app keeps for clips". */
+  readonly description: string
+  /** True once the closest measure has reached 90% (PLAN.md 9). */
+  readonly advising: boolean
+  /** Whether the modal is up. Dismissing snoozes the measure rather than hiding it forever. */
+  readonly prompting: boolean
+  readonly candidates: readonly CapacityCandidateView[]
+}
+
 export interface AppState {
   readonly spool: SpoolView
   /** The most recent decline, shown until the next capture replaces it. */
@@ -135,6 +160,7 @@ export interface AppState {
   readonly separator: SeparatorKind
   readonly spools: readonly SpoolSummary[]
   readonly pendingJoin: PendingJoin | null
+  readonly capacity: CapacityView
 }
 
 /** The channel names, in one place so the two sides cannot drift apart. */
@@ -157,6 +183,8 @@ export const CHANNELS = {
   revokeSourceRule: 'spool:revoke-source-rule',
   setConsentTimeout: 'spool:set-consent-timeout',
   resetEverything: 'spool:reset-everything',
+  dismissCapacityAdvice: 'spool:dismiss-capacity-advice',
+  deleteSpools: 'spool:delete-spools',
   deleteClip: 'spool:delete-clip',
   clearSpool: 'spool:clear-spool'
 } as const

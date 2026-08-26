@@ -8,7 +8,9 @@ import {
   loadSourceRules,
   loadSpools,
   saveSourceRules,
-  saveSpool
+  saveSpool,
+  spoolSizes,
+  storeBytes
 } from './repository'
 
 /**
@@ -39,6 +41,11 @@ export interface Store {
   saveSourceRules(rules: SourceRules): void
   loadSpools(): Spool[]
   loadSourceRules(): Map<string, SourceAction>
+  /** What each spool holds, counted in SQL for the capacity advisor (PLAN.md 9). */
+  spoolSizes(): Array<{ spoolId: string; clips: number; bytes: number }>
+  storeBytes(): number
+  /** Remove several spools at once, in one transaction (PLAN.md 11, M10). */
+  deleteSpools(spoolIds: readonly string[]): void
   close(): void
 }
 
@@ -85,6 +92,15 @@ function wrap(database: SpoolDatabase, path: string, now: () => string): Store {
     path,
     saveSpool: (spool) => saveSpool(database, spool, now()),
     deleteSpool: (spoolId) => deleteSpool(database, spoolId),
+    deleteSpools: (spoolIds) => {
+      // One transaction: reclaiming space must not half-apply, and the modal has already told the
+      // user exactly how many spools and how much space (PLAN.md 9).
+      database.transaction(() => {
+        for (const spoolId of spoolIds) deleteSpool(database, spoolId)
+      })()
+    },
+    spoolSizes: () => spoolSizes(database),
+    storeBytes: () => storeBytes(database),
     saveSourceRules: (rules) => saveSourceRules(database, rules, now()),
     loadSpools: () => loadSpools(database),
     loadSourceRules: () => loadSourceRules(database),

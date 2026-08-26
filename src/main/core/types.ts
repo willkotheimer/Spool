@@ -40,6 +40,11 @@ export interface Spool {
    * (PLAN.md 11, M9). Null is the default and stays the default.
    */
   readonly retentionHours: number | null
+  /**
+   * When this spool was last served from, made active, or edited (PLAN.md 9). Null means it has
+   * not been used since the column arrived, which the advisor treats as oldest.
+   */
+  readonly lastUsedAt: string | null
 }
 
 /** Why a capture did not happen. Every one of these is something the user is told (PLAN.md 3). */

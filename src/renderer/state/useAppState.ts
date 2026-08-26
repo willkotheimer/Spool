@@ -28,7 +28,17 @@ const initialState: AppState = {
   storage: { available: false, reason: null, canStartFresh: false, path: null },
   separator: 'newline',
   spools: [],
-  pendingJoin: null
+  pendingJoin: null,
+  capacity: {
+    measure: 'bytes',
+    used: 0,
+    cap: 512 * 1024 * 1024,
+    ratio: 0,
+    description: '',
+    advising: false,
+    prompting: false,
+    candidates: []
+  }
 }
 
 function reducer(_current: AppState, action: Action): AppState {

@@ -198,29 +198,42 @@ describe('migrations (PLAN.md 7)', () => {
     expect(pendingMigrations(0).map((m) => m.version)).toEqual(
       MIGRATIONS.map((migration) => migration.version)
     )
-    expect(pendingMigrations(1).map((m) => m.version)).toEqual([2])
+    expect(pendingMigrations(1).map((m) => m.version)).toEqual([2, 3])
+    expect(pendingMigrations(2).map((m) => m.version)).toEqual([3])
     expect(pendingMigrations(CURRENT_SCHEMA_VERSION)).toEqual([])
   })
 
-  it('upgrades a file written by an earlier version, keeping what was in it', () => {
-    // Build a genuine v1 file: the v1 migration only, and meta saying so.
+  it('upgrades a file written by the version M6 shipped, keeping what was in it', () => {
+    // Build a genuine v1 file — the schema exactly as M6 wrote it, with meta saying so — and then
+    // let the runner walk it forward through every migration since (PLAN.md 11, M10).
     const first = open()
     first.database.prepare('DELETE FROM spools').run()
     first.database.exec('ALTER TABLE spools DROP COLUMN retention_hours')
+    first.database.exec('ALTER TABLE spools DROP COLUMN last_used_at')
     first.database.prepare('UPDATE meta SET schema_version = 1').run()
     saveSpoolV1(first.database, 'kept', 'Kept from v1')
+    first.database
+      .prepare(
+        `INSERT INTO clips
+           (id, spool_id, position, content, preview, byte_len, source_app, was_flagged, captured_at)
+         VALUES ('c1', 'kept', 0, 'written by M6', 'written by M6', 13, NULL, 0, ?)`
+      )
+      .run(NOW)
     first.database.close()
 
     const upgraded = open()
-    expect(upgraded.migrated).toEqual([2])
+    expect(upgraded.migrated).toEqual([2, 3])
     expect(schemaVersion(upgraded.database)).toBe(CURRENT_SCHEMA_VERSION)
 
     const [spool] = loadSpools(upgraded.database)
     upgraded.database.close()
 
+    // Invariant 5: the user's data file survives upgrades.
     expect(spool.name).toBe('Kept from v1')
-    // A spool that predates retention has no limit, which is the default anyway.
+    expect(spool.clips.map((clip) => clip.content)).toEqual(['written by M6'])
+    // Columns added since default to null, which is what every rule reading them expects.
     expect(spool.retentionHours).toBeNull()
+    expect(spool.lastUsedAt).toBeNull()
   })
 })
 

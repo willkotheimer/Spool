@@ -18,6 +18,7 @@ interface SpoolRow {
   cursor_clip_id: string | null
   is_default: number
   retention_hours: number | null
+  last_used_at: string | null
 }
 
 interface ClipRow {
@@ -33,7 +34,8 @@ interface ClipRow {
 export function loadSpools(database: SpoolDatabase): Spool[] {
   const spools = database
     .prepare(
-      'SELECT id, name, mode, cursor_clip_id, is_default, retention_hours FROM spools ORDER BY created_at'
+      `SELECT id, name, mode, cursor_clip_id, is_default, retention_hours, last_used_at
+       FROM spools ORDER BY created_at`
     )
     .all() as SpoolRow[]
 
@@ -69,7 +71,8 @@ export function loadSpools(database: SpoolDatabase): Spool[] {
       mode: row.mode,
       clips,
       cursorClipId,
-      retentionHours: row.retention_hours
+      retentionHours: row.retention_hours,
+      lastUsedAt: row.last_used_at
     }
   })
 }
@@ -78,13 +81,16 @@ export function loadSpools(database: SpoolDatabase): Spool[] {
 export function saveSpool(database: SpoolDatabase, spool: Spool, now: string): void {
   const upsertSpool = database.prepare(
     `INSERT INTO spools
-       (id, name, mode, cursor_clip_id, is_default, retention_hours, created_at, updated_at)
-     VALUES (@id, @name, @mode, @cursor_clip_id, @is_default, @retention_hours, @now, @now)
+       (id, name, mode, cursor_clip_id, is_default, retention_hours, last_used_at,
+        created_at, updated_at)
+     VALUES (@id, @name, @mode, @cursor_clip_id, @is_default, @retention_hours, @last_used_at,
+             @now, @now)
      ON CONFLICT (id) DO UPDATE SET
        name = excluded.name,
        mode = excluded.mode,
        cursor_clip_id = excluded.cursor_clip_id,
        retention_hours = excluded.retention_hours,
+       last_used_at = excluded.last_used_at,
        updated_at = excluded.updated_at`
   )
   const deleteClips = database.prepare('DELETE FROM clips WHERE spool_id = ?')
@@ -102,6 +108,7 @@ export function saveSpool(database: SpoolDatabase, spool: Spool, now: string): v
       cursor_clip_id: spool.cursorClipId,
       is_default: spool.kind === 'default' ? 1 : 0,
       retention_hours: spool.retentionHours ?? null,
+      last_used_at: spool.lastUsedAt ?? null,
       now
     })
 
@@ -130,6 +137,35 @@ export function saveSpool(database: SpoolDatabase, spool: Spool, now: string): v
  */
 export function deleteSpool(database: SpoolDatabase, spoolId: string): void {
   database.prepare('DELETE FROM spools WHERE id = ?').run(spoolId)
+}
+
+/**
+ * What each spool holds, for the capacity advisor (PLAN.md 9).
+ *
+ * Counted in SQL rather than by loading every clip: the advisor runs on launch and after captures,
+ * and reading a store's worth of clip content to add up its sizes would be the most expensive thing
+ * the app does.
+ */
+export function spoolSizes(
+  database: SpoolDatabase
+): Array<{ spoolId: string; clips: number; bytes: number }> {
+  return database
+    .prepare(
+      `SELECT spools.id AS spoolId,
+              count(clips.id) AS clips,
+              coalesce(sum(clips.byte_len), 0) AS bytes
+       FROM spools LEFT JOIN clips ON clips.spool_id = spools.id
+       GROUP BY spools.id`
+    )
+    .all() as Array<{ spoolId: string; clips: number; bytes: number }>
+}
+
+/** Total bytes held by every clip in the store. */
+export function storeBytes(database: SpoolDatabase): number {
+  const row = database.prepare('SELECT coalesce(sum(byte_len), 0) AS bytes FROM clips').get() as {
+    bytes: number
+  }
+  return row.bytes
 }
 
 export function loadSourceRules(database: SpoolDatabase): Map<string, SourceAction> {

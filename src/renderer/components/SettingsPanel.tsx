@@ -1,5 +1,6 @@
 import { useState, type JSX, type ReactNode } from 'react'
 import type { AppState } from '../../shared/ipc'
+import { formatBytes, percentFull } from '../helpers/CapacityHelper'
 import { RETENTION_LABELS, formatLimit, retentionLabel } from '../helpers/SettingsPanelHelper'
 
 /**
@@ -11,7 +12,7 @@ import { RETENTION_LABELS, formatLimit, retentionLabel } from '../helpers/Settin
  * would hold precisely the bytes the user was trying to be rid of (PLAN.md 12).
  */
 export function SettingsPanel({ state, onBack }: { state: AppState; onBack: () => void }): JSX.Element {
-  const { spools, privacy } = state
+  const { spools, privacy, capacity } = state
   const [typed, setTyped] = useState('')
   const [resetFailures, setResetFailures] = useState<Array<{ path: string; reason: string }>>([])
 
@@ -60,6 +61,30 @@ export function SettingsPanel({ state, onBack }: { state: AppState; onBack: () =
               .filter((spool) => spool.retentionHours !== null)
               .map((spool) => `${spool.name}: ${retentionLabel(spool.retentionHours)}`)
               .join(' · ')}
+          </p>
+        </Section>
+
+        {/* The same figures the modal shows, on demand — the modal is a prompt, never the only
+            route to them (PLAN.md 9). */}
+        <Section title="Storage">
+          <p className="text-spool-paper/50">
+            {capacity.description} — {percentFull(capacity.ratio)} full.
+          </p>
+          {capacity.candidates.length > 0 && (
+            <ul className="space-y-0.5">
+              {capacity.candidates.map((candidate) => (
+                <li key={candidate.id} className="flex justify-between gap-2 text-spool-paper/50">
+                  <span className="truncate">{candidate.name}</span>
+                  <span className="shrink-0">
+                    {candidate.clips} · {formatBytes(candidate.bytes)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-[10px] text-spool-paper/35">
+            Spool never deletes anything on its own. When the store approaches its limit it offers a
+            list, and waits.
           </p>
         </Section>
 
