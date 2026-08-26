@@ -43,7 +43,12 @@ nested directory fails on Windows' 260-character path limit.
 
 ## Status
 
-M9 — retention and control: an optional per-spool age limit, a settings panel listing every standing
+M10 — the capacity advisor: when the store approaches its 512 MB budget, Spool offers a list of
+spools you have finished with — oldest used first, never the default or the one you are working in —
+with sizes, a running total of what deleting them frees, and a Not now that means it. Nothing is ever
+deleted that you did not check. The same figures live permanently in Settings under Storage.
+
+Underneath, M9 — retention and control: an optional per-spool age limit, a settings panel listing every standing
 answer with a way to revoke it, a configurable consent timeout, the caps shown read-only, and
 **Reset everything** — a failsafe that deletes the store, the sealed key, and the preferences
 without reading any of them, then restarts. Underneath are M8's spool management, M7's arranging and

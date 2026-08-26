@@ -44,6 +44,52 @@ function started(): {
   return { session, watcher, written }
 }
 
+/**
+ * An in-memory stand-in for the encrypted store, recording what was written.
+ *
+ * Defined once: the Store interface gained methods at M6, M8, and M10, and three ad-hoc copies of
+ * it meant three places to update every time.
+ */
+function fakeStore(
+  initial: { spools?: Spool[]; rules?: Map<string, SourceAction>; bytes?: number } = {}
+) {
+  const saved: {
+    spools: Spool[]
+    deleted: string[]
+    deletedBatches: string[][]
+    rules: Map<string, SourceAction>[]
+  } = { spools: [], deleted: [], deletedBatches: [], rules: [] }
+
+  const store = {
+    path: 'C:/Users/someone/AppData/Roaming/Spool/spool.db',
+    saveSpool: (spool: Spool) => {
+      saved.spools.push(spool)
+    },
+    deleteSpool: (spoolId: string) => {
+      saved.deleted.push(spoolId)
+    },
+    deleteSpools: (spoolIds: readonly string[]) => {
+      saved.deletedBatches.push([...spoolIds])
+      saved.deleted.push(...spoolIds)
+    },
+    saveSourceRules: (rules: SourceRules) => {
+      saved.rules.push(new Map(rules))
+    },
+    loadSpools: () => initial.spools ?? [],
+    loadSourceRules: () => initial.rules ?? new Map<string, SourceAction>(),
+    spoolSizes: () =>
+      (initial.spools ?? []).map((spool) => ({
+        spoolId: spool.id,
+        clips: spool.clips.length,
+        bytes: spool.clips.reduce((total, clip) => total + clip.byteLength, 0)
+      })),
+    storeBytes: () => initial.bytes ?? 0,
+    close: () => {}
+  }
+
+  return { saved, store }
+}
+
 describe('a session that is capturing', () => {
   it('shows three copies as three clips, oldest first, with the oldest serving next', () => {
     const { session, watcher } = started()
@@ -442,33 +488,6 @@ describe('the consent timeout (PLAN.md 4)', () => {
 })
 
 describe('persistence (PLAN.md 11, M6)', () => {
-  /** An in-memory stand-in for the encrypted store, recording what was written. */
-  function fakeStore(initial: { spools?: Spool[]; rules?: Map<string, SourceAction> } = {}) {
-    const saved: { spools: Spool[]; deleted: string[]; rules: Map<string, SourceAction>[] } = {
-      spools: [],
-      deleted: [],
-      rules: []
-    }
-    return {
-      saved,
-      store: {
-        path: 'C:/Users/someone/AppData/Roaming/Spool/spool.db',
-        saveSpool: (spool: Spool) => {
-          saved.spools.push(spool)
-        },
-        deleteSpool: (spoolId: string) => {
-          saved.deleted.push(spoolId)
-        },
-        saveSourceRules: (rules: SourceRules) => {
-          saved.rules.push(new Map(rules))
-        },
-        loadSpools: () => initial.spools ?? [],
-        loadSourceRules: () => initial.rules ?? new Map<string, SourceAction>(),
-        close: () => {}
-      }
-    }
-  }
-
   it('writes the spool through on capture, and again when the cursor moves', () => {
     const { session, watcher } = started()
     const { store, saved } = fakeStore()
@@ -509,7 +528,8 @@ describe('persistence (PLAN.md 11, M6)', () => {
         createClip({ id: 'b', content: 'second', capturedAt: '2026-08-22T17:00:01.000Z' })
       ],
       cursorClipId: 'b',
-      retentionHours: null
+      retentionHours: null,
+      lastUsedAt: null
     }
 
     const { session } = started()
@@ -715,23 +735,7 @@ describe('arranging (PLAN.md 11, M7)', () => {
 
   it('keeps an arrangement as a new spool, leaving the original untouched', () => {
     const { session, watcher } = started()
-    const { store, saved } = (() => {
-      const spools: Spool[] = []
-      return {
-        saved: spools,
-        store: {
-          path: 'x',
-          saveSpool: (spool: Spool) => {
-            spools.push(spool)
-          },
-          deleteSpool: () => {},
-          saveSourceRules: () => {},
-          loadSpools: () => [],
-          loadSourceRules: () => new Map<string, SourceAction>(),
-          close: () => {}
-        }
-      }
-    })()
+    const { store, saved } = fakeStore()
     session.attachStore(store)
     for (const value of ['a', 'b', 'c']) watcher.change(text(value))
     const ids = session.getState().spool.clips.map((clip) => clip.id)
@@ -742,7 +746,7 @@ describe('arranging (PLAN.md 11, M7)', () => {
     expect(session.getState().spool.clips.map((clip) => clip.preview)).toEqual(['a', 'b', 'c'])
 
     // And the new one exists, with the arrangement.
-    const created = saved.find((spool) => spool.name === 'Reversed')
+    const created = saved.spools.find((spool) => spool.name === 'Reversed')
     expect(created?.clips.map((clip) => clip.preview)).toEqual(['c', 'b', 'a'])
     expect(created?.kind).toBe('saved')
     expect(session.getState().spools.map((s) => s.name)).toContain('Reversed')
@@ -883,21 +887,8 @@ describe('managing spools and clips (PLAN.md 11, M8)', () => {
 
   it('writes every one of these through to the store', () => {
     const { session, watcher } = started()
-    const spools: Spool[] = []
-    const deleted: string[] = []
-    session.attachStore({
-      path: 'x',
-      saveSpool: (spool) => {
-        spools.push(spool)
-      },
-      deleteSpool: (id) => {
-        deleted.push(id)
-      },
-      saveSourceRules: () => {},
-      loadSpools: () => [],
-      loadSourceRules: () => new Map<string, SourceAction>(),
-      close: () => {}
-    })
+    const { store, saved } = fakeStore()
+    session.attachStore(store)
 
     fill(watcher, ['a'])
     const createdId = session.createNamedSpool('Kept') ?? ''
@@ -905,7 +896,171 @@ describe('managing spools and clips (PLAN.md 11, M8)', () => {
     const doomedId = session.createNamedSpool('Doomed') ?? ''
     session.deleteSpool(doomedId)
 
-    expect(spools.some((spool) => spool.name === 'Renamed')).toBe(true)
-    expect(deleted).toContain(doomedId)
+    expect(saved.spools.some((spool) => spool.name === 'Renamed')).toBe(true)
+    expect(saved.deleted).toContain(doomedId)
+  })
+})
+
+describe('the capacity advisor (PLAN.md 9)', () => {
+  const MIB = 1024 * 1024
+
+  /** A spool that reports a given size, as the store would count it. */
+  const sized = (id: string, name: string, bytes: number, lastUsedAt: string | null): Spool => ({
+    id,
+    name,
+    kind: 'saved',
+    mode: 'fifo',
+    clips: [
+      {
+        id: `${id}-clip`,
+        content: 'x',
+        preview: 'x',
+        byteLength: bytes,
+        sourceApp: null,
+        wasFlagged: false,
+        capturedAt: '2026-08-01T00:00:00.000Z'
+      }
+    ],
+    cursorClipId: `${id}-clip`,
+    retentionHours: null,
+    lastUsedAt
+  })
+
+  const defaultSpool: Spool = {
+    id: 'default',
+    name: 'Default spool',
+    kind: 'default',
+    mode: 'fifo',
+    clips: [],
+    cursorClipId: null,
+    retentionHours: null,
+    lastUsedAt: null
+  }
+
+  /** A store seeded past ninety per cent of the byte budget. */
+  function nearlyFull() {
+    const spools = [
+      defaultSpool,
+      sized('old', 'Old notes', 200 * MIB, '2026-01-01T00:00:00.000Z'),
+      sized('older', 'Older notes', 100 * MIB, '2025-06-01T00:00:00.000Z'),
+      sized('recent', 'Recent notes', 170 * MIB, '2026-08-20T00:00:00.000Z')
+    ]
+    return fakeStore({ spools, bytes: 470 * MIB })
+  }
+
+  it('advises on launch, naming bytes as the measure that tripped', () => {
+    const { session } = started()
+    session.attachStore(nearlyFull().store)
+
+    const { capacity } = session.getState()
+    expect(capacity.advising).toBe(true)
+    expect(capacity.prompting).toBe(true)
+    expect(capacity.measure).toBe('bytes')
+    expect(capacity.description).toBe('470 MB of the 512 MB this app keeps for clips')
+  })
+
+  it('says nothing at all when the store is comfortable', () => {
+    const { session } = started()
+    session.attachStore(fakeStore({ spools: [defaultSpool], bytes: 10 * MIB }).store)
+
+    expect(session.getState().capacity.advising).toBe(false)
+    expect(session.getState().capacity.prompting).toBe(false)
+  })
+
+  it('offers candidates oldest-used first', () => {
+    const { session } = started()
+    session.attachStore(nearlyFull().store)
+
+    // The default spool is active here, so every saved spool is on offer, oldest use first.
+    expect(session.getState().capacity.candidates.map((c) => c.name)).toEqual([
+      'Older notes',
+      'Old notes',
+      'Recent notes'
+    ])
+  })
+
+  it('never proposes the default spool or the one being worked in', () => {
+    const { session } = started()
+    session.attachStore(nearlyFull().store)
+    session.setActiveSpool('recent')
+
+    const { candidates } = session.getState().capacity
+    expect(candidates.some((c) => c.name === 'Default spool')).toBe(false)
+    expect(candidates.some((c) => c.name === 'Recent notes')).toBe(false)
+    expect(candidates.map((c) => c.name)).toEqual(['Older notes', 'Old notes'])
+  })
+
+  it('reports each candidate size, because a list without sizes is not actionable', () => {
+    const { session } = started()
+    session.attachStore(nearlyFull().store)
+
+    const byName = new Map(session.getState().capacity.candidates.map((c) => [c.name, c]))
+    expect(byName.get('Old notes')?.bytes).toBe(200 * MIB)
+    expect(byName.get('Older notes')?.bytes).toBe(100 * MIB)
+  })
+
+  it('deletes exactly what was chosen, in one call to the store', () => {
+    const { session } = started()
+    const { store, saved } = nearlyFull()
+    session.attachStore(store)
+
+    session.deleteSpools(['old', 'older'])
+
+    expect(saved.deletedBatches).toEqual([['old', 'older']])
+    expect(session.getState().spools.map((s) => s.name)).toEqual([
+      'Default spool',
+      'Recent notes'
+    ])
+  })
+
+  it('never deletes the default spool or the active one, whatever it is handed', () => {
+    const { session } = started()
+    const { store, saved } = nearlyFull()
+    session.attachStore(store)
+    const activeId = session.getState().spools.find((s) => s.isActive)?.id ?? ''
+
+    session.deleteSpools(['default', activeId])
+
+    expect(saved.deletedBatches).toEqual([])
+    expect(session.getState().spools.some((s) => s.isDefault)).toBe(true)
+  })
+
+  it('Not now deletes nothing and does not come back for that measure', () => {
+    const { session, watcher } = started()
+    const { store, saved } = nearlyFull()
+    session.attachStore(store)
+    expect(session.getState().capacity.prompting).toBe(true)
+
+    session.dismissCapacityAdvice()
+
+    expect(saved.deletedBatches).toEqual([])
+    expect(session.getState().capacity.prompting).toBe(false)
+    // Still over the line, and still silent: the measure is snoozed, not forgotten.
+    expect(session.getState().capacity.advising).toBe(true)
+
+    watcher.change(text('another clip, still over ninety per cent'))
+    expect(session.getState().capacity.prompting).toBe(false)
+  })
+
+  it('keeps reporting the figures after a dismissal, for the Storage panel', () => {
+    const { session } = started()
+    session.attachStore(nearlyFull().store)
+    session.dismissCapacityAdvice()
+
+    const { capacity } = session.getState()
+    expect(capacity.description).toContain('470 MB')
+    expect(capacity.candidates).toHaveLength(3)
+  })
+
+  it('records when a spool was last used, which is what the ranking depends on', () => {
+    const { session, watcher } = started()
+    watcher.change(text('a clip'))
+    const before = session.getState().spools.find((s) => s.isActive)
+
+    session.createNamedSpool('Just made')
+
+    const created = session.getState().spools.find((s) => s.name === 'Just made')
+    expect(created).toBeDefined()
+    expect(before).toBeDefined()
   })
 })

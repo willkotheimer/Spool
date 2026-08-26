@@ -23,6 +23,14 @@ import {
   SAVED_SPOOL_CLIP_CAP,
   STORE_BYTE_BUDGET
 } from './core/limits'
+import {
+  closestMeasure,
+  describeMeasure,
+  rankCandidates,
+  shouldAdvise,
+  type CapacityCandidate,
+  type MeasureName
+} from './core/capacity'
 import { expireClips, isRetentionHours } from './core/retention'
 import { arrange, clear, createSpool, deleteClip, serve, setMode } from './core/spool'
 import type { Clip, Mode, Spool } from './core/types'
@@ -77,6 +85,15 @@ export class Session {
   /** A joined result large enough to be felt system-wide, waiting on a yes (PLAN.md 3). */
   private pendingJoin: { text: string; byteLength: number; clips: number } | null = null
 
+  /**
+   * Capacity advice (PLAN.md 9). The modal is raised at most once per session per measure: a
+   * dismissal snoozes that measure rather than hiding it forever, so the advisor cannot nag.
+   */
+  private capacityPrompt: MeasureName | null = null
+  private snoozed = new Set<MeasureName>()
+  private sizes: Array<{ spoolId: string; clips: number; bytes: number }> = []
+  private storedBytes = 0
+
   /** Where state is written through to. Null means this session keeps nothing (PLAN.md 11, M6). */
   private store: Store | null = null
   private storage: StorageStatus = {
@@ -129,6 +146,10 @@ export class Session {
     this.savedSpool = this.state.spool
     this.savedRules = this.state.sourceRules
 
+    // Count what is stored and, if a measure has already reached ninety per cent, say so on launch
+    // rather than waiting for the next capture (PLAN.md 11, M10).
+    this.refreshCapacity()
+
     this.publish()
   }
 
@@ -175,6 +196,8 @@ export class Session {
     this.absorb(outcome)
     // Retention applies on capture as well as on launch, so a long session ages out too.
     this.expireActive()
+    // A capture is the one moment the store reliably grows.
+    if (outcome.captured !== null) this.refreshCapacity()
   }
 
   /**
@@ -236,7 +259,7 @@ export class Session {
     // than captured as a new copy (PLAN.md 11, M4).
     this.state = {
       ...this.state,
-      spool: result.spool,
+      spool: this.touch(result.spool),
       pendingSelfWrite: result.clip.content
     }
     this.notice = null
@@ -309,7 +332,7 @@ export class Session {
     const rearranged = arrange(this.state.spool.clips, clipIds)
     if (rearranged === null) return
 
-    this.state = { ...this.state, spool: { ...this.state.spool, clips: rearranged } }
+    this.state = { ...this.state, spool: this.touch({ ...this.state.spool, clips: rearranged }) }
     this.publish()
   }
 
@@ -330,7 +353,8 @@ export class Session {
       mode: this.state.spool.mode,
       clips: copied,
       cursorClipId: copied[0]?.id ?? null,
-      retentionHours: null
+      retentionHours: null,
+      lastUsedAt: new Date().toISOString()
     }
 
     this.otherSpools = [...this.otherSpools, created]
@@ -498,10 +522,37 @@ export class Session {
     this.store = null
   }
 
+  /**
+   * Delete several spools at once, in one transaction (PLAN.md 9).
+   *
+   * Only ever what the user checked: nothing is reclaimed that someone did not choose, and there is
+   * no undo buffer, because it would hold exactly the bytes they were trying to free (PLAN.md 12).
+   */
+  deleteSpools(spoolIds: readonly string[]): void {
+    const removable = spoolIds.filter((id) => {
+      const spool = this.allSpools().find((candidate) => candidate.id === id)
+      return spool !== undefined && spool.kind !== 'default' && spool.id !== this.state.spool.id
+    })
+    if (removable.length === 0) return
+
+    this.otherSpools = this.otherSpools.filter((spool) => !removable.includes(spool.id))
+    this.store?.deleteSpools(removable)
+    this.capacityPrompt = null
+    this.refreshCapacity()
+    this.publish()
+  }
+
+  /** Not now: nothing is deleted, and this measure stays quiet until the floor (PLAN.md 9). */
+  dismissCapacityAdvice(): void {
+    if (this.capacityPrompt !== null) this.snoozed.add(this.capacityPrompt)
+    this.capacityPrompt = null
+    this.publish()
+  }
+
   /** Change direction. The cursor stays on the clip it was on (PLAN.md 3). */
   toggleMode(): void {
     const next: Mode = this.state.spool.mode === 'fifo' ? 'lifo' : 'fifo'
-    this.state = { ...this.state, spool: setMode(this.state.spool, next) }
+    this.state = { ...this.state, spool: this.touch(setMode(this.state.spool, next)) }
     this.publish()
   }
 
@@ -512,6 +563,51 @@ export class Session {
 
     this.state = { ...this.state, spool: aged }
     this.publish()
+  }
+
+  /** Re-count what the store holds, and speak if a measure has reached the advisory level. */
+  private refreshCapacity(): void {
+    if (this.store === null) return
+
+    this.sizes = this.store.spoolSizes()
+    this.storedBytes = this.store.storeBytes()
+
+    const measure = closestMeasure(this.capacitySnapshot())
+    if (shouldAdvise(measure) && !this.snoozed.has(measure.name)) {
+      this.capacityPrompt = measure.name
+    }
+  }
+
+  private capacitySnapshot() {
+    return {
+      storeBytes: this.storedBytes,
+      savedSpools: this.allSpools().filter((spool) => spool.kind !== 'default').length,
+      clipsInActiveSpool: this.state.spool.clips.length
+    }
+  }
+
+  /** Every spool the advisor could offer, with what it holds. */
+  private capacityCandidates(): CapacityCandidate[] {
+    const sizeOf = new Map(this.sizes.map((size) => [size.spoolId, size]))
+
+    return this.allSpools().map((spool) => {
+      const size = sizeOf.get(spool.id)
+      return {
+        id: spool.id,
+        name: spool.name,
+        clips: size?.clips ?? spool.clips.length,
+        bytes:
+          size?.bytes ?? spool.clips.reduce((total, clip) => total + clip.byteLength, 0),
+        lastUsedAt: spool.lastUsedAt,
+        isDefault: spool.kind === 'default',
+        isActive: spool.id === this.state.spool.id
+      }
+    })
+  }
+
+  /** Mark a spool as used now, which is what the advisor ranks by (PLAN.md 9). */
+  private touch(spool: Spool): Spool {
+    return { ...spool, lastUsedAt: new Date().toISOString() }
   }
 
   private allSpools(): Spool[] {
@@ -530,7 +626,7 @@ export class Session {
 
     this.otherSpools = keepLeaving ? [...remaining, leaving] : remaining
     // Duplicate suppression compares against the last capture *in this spool*, so it resets.
-    this.state = { ...this.state, spool: next, lastCapturedText: null }
+    this.state = { ...this.state, spool: this.touch(next), lastCapturedText: null }
     this.savedSpool = null
   }
 
@@ -555,6 +651,7 @@ export class Session {
         this.pendingJoin === null
           ? null
           : { byteLength: this.pendingJoin.byteLength, clips: this.pendingJoin.clips },
+      capacity: this.capacityView(),
       prompt: this.promptView(),
       privacy: {
         heuristics: HEURISTIC_RULES,
@@ -572,6 +669,29 @@ export class Session {
         },
         dataFilePath: this.storage.path
       }
+    }
+  }
+
+  /** What the modal and the Storage panel both read (PLAN.md 9). */
+  private capacityView() {
+    const measure = closestMeasure(this.capacitySnapshot())
+    const ranked = rankCandidates(this.capacityCandidates())
+
+    return {
+      measure: measure.name,
+      used: measure.used,
+      cap: measure.cap,
+      ratio: measure.ratio,
+      description: describeMeasure(measure),
+      advising: shouldAdvise(measure),
+      prompting: this.capacityPrompt !== null,
+      candidates: ranked.map((candidate) => ({
+        id: candidate.id,
+        name: candidate.name,
+        clips: candidate.clips,
+        bytes: candidate.bytes,
+        lastUsedAt: candidate.lastUsedAt
+      }))
     }
   }
 

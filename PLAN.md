@@ -1036,7 +1036,8 @@ that app to prompt again.
 Also the milestone that makes invariant 5 testable: it introduces the first real schema change, so
 M13's upgrade test verifies a genuine migration instead of two identical schemas.
 
-**In scope** — `last_used_at` on spools as `schema_version = 2` with a forward migration; store
+**In scope** — `last_used_at` on spools with a forward migration — `schema_version = 3` in the end,
+since M9's retention column took v2 (§7); store
 size and cap accounting; the 90% trigger and per-measure snooze; the §9 modal with multi-select and a
 running freed-space total; mass delete in one transaction; the permanent Storage panel.
 **Out of scope** — undo, export, and any automatic deletion whatsoever.

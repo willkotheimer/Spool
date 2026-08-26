@@ -73,6 +73,10 @@ export function registerIpc(
     session.setConsentTimeout(seconds)
   )
   ipcMain.handle(CHANNELS.resetEverything, () => actions.resetEverything())
+  ipcMain.handle(CHANNELS.dismissCapacityAdvice, () => session.dismissCapacityAdvice())
+  ipcMain.handle(CHANNELS.deleteSpools, (_event, spoolIds: string[]) =>
+    session.deleteSpools(spoolIds)
+  )
   ipcMain.handle(CHANNELS.clearSpool, (_event, spoolId: string) => session.clearSpool(spoolId))
 
   const unsubscribe = session.onChange((state) => {
@@ -101,6 +105,8 @@ export function registerIpc(
     ipcMain.removeHandler(CHANNELS.revokeSourceRule)
     ipcMain.removeHandler(CHANNELS.setConsentTimeout)
     ipcMain.removeHandler(CHANNELS.resetEverything)
+    ipcMain.removeHandler(CHANNELS.dismissCapacityAdvice)
+    ipcMain.removeHandler(CHANNELS.deleteSpools)
     ipcMain.removeHandler(CHANNELS.clearSpool)
     unsubscribe()
   }

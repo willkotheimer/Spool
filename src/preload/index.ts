@@ -65,6 +65,11 @@ const api = {
     ipcRenderer.invoke(CHANNELS.revokeSourceRule, sourceApp),
   setConsentTimeout: (seconds: number): Promise<void> =>
     ipcRenderer.invoke(CHANNELS.setConsentTimeout, seconds),
+  /** The capacity advisor (PLAN.md 9): it recommends, the user decides. */
+  dismissCapacityAdvice: (): Promise<void> => ipcRenderer.invoke(CHANNELS.dismissCapacityAdvice),
+  deleteSpools: (spoolIds: readonly string[]): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.deleteSpools, spoolIds),
+
   /** Wipes the store, the sealed key, and the preferences, then restarts (PLAN.md 11, M9). */
   resetEverything: (): Promise<{ failed: Array<{ path: string; reason: string }> }> =>
     ipcRenderer.invoke(CHANNELS.resetEverything),

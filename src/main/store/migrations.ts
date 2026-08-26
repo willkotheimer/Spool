@@ -73,6 +73,13 @@ CREATE TABLE source_rules (
  */
 const V2 = `ALTER TABLE spools ADD COLUMN retention_hours INTEGER;`
 
+/**
+ * When a spool was last served from, made active, or edited — what the capacity advisor ranks by
+ * (PLAN.md 9). Null for spools that predate the column, which sorts them oldest: a spool with no
+ * recorded use is the least likely to be missed.
+ */
+const V3 = `ALTER TABLE spools ADD COLUMN last_used_at TEXT;`
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -81,6 +88,10 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     version: 2,
     up: (database) => database.exec(V2)
+  },
+  {
+    version: 3,
+    up: (database) => database.exec(V3)
   }
 ]
 
