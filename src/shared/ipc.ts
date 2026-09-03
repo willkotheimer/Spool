@@ -172,6 +172,11 @@ export interface AppState {
   readonly spools: readonly SpoolSummary[]
   readonly pendingJoin: PendingJoin | null
   readonly capacity: CapacityView
+  /**
+   * True until the privacy statement has been acknowledged. While true, nothing is being captured
+   * (PLAN.md 11, M13).
+   */
+  readonly firstRun: boolean
 }
 
 /** The channel names, in one place so the two sides cannot drift apart. */
@@ -196,6 +201,7 @@ export const CHANNELS = {
   resetEverything: 'spool:reset-everything',
   dismissCapacityAdvice: 'spool:dismiss-capacity-advice',
   pauseCapture: 'spool:pause-capture',
+  acknowledgePrivacy: 'spool:acknowledge-privacy',
   resumeCapture: 'spool:resume-capture',
   deleteSpools: 'spool:delete-spools',
   setStarred: 'spool:set-starred',

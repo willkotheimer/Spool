@@ -3,6 +3,7 @@ import { capacityLabel } from '../helpers/ClipListHelper'
 import { useAppState } from '../state/useAppState'
 import { CapacityAdvisor } from './CapacityAdvisor'
 import { ClipList } from './ClipList'
+import { FirstRun } from './FirstRun'
 import { ExpandedView } from './ExpandedView'
 import { ConsentPrompt } from './ConsentPrompt'
 import { PrivacyPanel } from './PrivacyPanel'
@@ -28,6 +29,11 @@ export function App(): JSX.Element {
   const { summonHotkey, serveHotkey, pasteAllHotkey, modeHotkey, platform } = window.spool
   const state = useAppState()
   const { spool, notice, capture, prompt, privacy, storage, capacity } = state
+
+  // Before anything else: the statement, and nothing captured until it is acknowledged.
+  if (state.firstRun) {
+    return <FirstRun platform={platform} privacy={privacy} />
+  }
 
   // The advisor is raised over whatever is on screen: it is a prompt about the whole store, not
   // about the view the user happens to be in (PLAN.md 9).

@@ -29,6 +29,7 @@ const initialState: AppState = {
   separator: 'newline',
   spools: [],
   pendingJoin: null,
+  firstRun: false,
   capacity: {
     measure: 'bytes',
     used: 0,

@@ -25,14 +25,16 @@ describe('settings (PLAN.md 3, 8)', () => {
       separator: 'tab',
       window: 'expanded',
       activeSpoolId: 'abc',
-      consentTimeoutSeconds: 45
+      consentTimeoutSeconds: 45,
+      privacyAcknowledged: true
     })
 
     expect(loadSettings(path())).toEqual({
       separator: 'tab',
       window: 'expanded',
       activeSpoolId: 'abc',
-      consentTimeoutSeconds: 45
+      consentTimeoutSeconds: 45,
+      privacyAcknowledged: true
     })
   })
 
@@ -62,7 +64,11 @@ describe('settings (PLAN.md 3, 8)', () => {
       separator: 'comma',
       window: 'compact',
       activeSpoolId: null,
-      consentTimeoutSeconds: 30
+      consentTimeoutSeconds: 30,
+      privacyAcknowledged: false
     })
+
+    // The cautious default: a settings file that says nothing about it has not agreed to anything.
+    expect(loadSettings(path()).privacyAcknowledged).toBe(false)
   })
 })

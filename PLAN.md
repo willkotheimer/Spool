@@ -1102,9 +1102,57 @@ auto-updater and why; and the upgrade test for invariant 5.
 raises no SmartScreen warning** — an unsigned build reads as a student project regardless of what is
 inside it. First run shows the privacy statement before the clipboard listener starts. **The upgrade
 test**: check out M6, run the app, capture clips, quit; check out M13, launch against that same data
-file, and confirm every clip and cursor survives the v1 → v3 migration path. This is the
+file, and confirm every clip and cursor survives the v1 → v4 migration path (v3 as first
+written; the schema was renumbered in §7). This is the
 QuickBooks-desktop problem, and it is the criterion that matters most in this milestone.
 **Commit** — `Package a signed Windows installer and verify the data file survives upgrade`
+
+**Measured, M13.** The upgrade test was run as written and passed, and the migration was performed
+by the artifact that actually ships. A worktree at the M6 commit was built and launched against a
+deleted store, so it created a genuine v1 file; three clips were copied into it and it was stopped.
+Reading that file directly showed `schema_version = 1`, three clips, a `cursor_clip_id`, and a
+`spools` table with no `retention_hours`, `last_used_at`, or `is_starred` column. The NSIS installer
+was then installed and its app launched against that same file. Afterwards the file read
+`schema_version = 4`, with the same three clip ids in the same positions, the same content, the same
+`cursor_clip_id`, the file's original `created_at`, and the three new columns added with null and 0
+defaults. The installed build then captured a further clip into the migrated file, which is also the
+proof that the clipboard addon and SQLCipher both load from `app.asar.unpacked` in a real install.
+
+**Verify the migration with the shipped artifact, not a convenient one.** The first run of this test
+was done with a diagnostic build — `--dir`, asar disabled, a logging prepend patched into the bundle
+— because that was what was already on disk while a launch failure was being chased. It passed, but
+it proved less than it appeared to: asar packing is precisely what changes how native modules and
+file paths resolve, so a migration performed by an unpacked build says nothing certain about the
+packed one. Worse, once the file was at v4 there was no v1 file left to try the real installer
+against, so the second, shipped build was only ever observed opening an already-migrated file. The
+test was redone from a fresh M6 file end to end. A verification run against something other than the
+artifact users receive is a rehearsal, not a result.
+
+**The signing criterion is not met.** The installer builds, installs per-user without administrator,
+creates its shortcuts, and launches — but `Get-AuthenticodeSignature` reports `NotSigned`, so
+SmartScreen will warn. Azure Trusted Signing needs an Azure subscription and a validated identity,
+which is an account to be bought rather than code to be written; the configuration block is present
+in `electron-builder.yml`, commented, with the four values it needs. This is recorded rather than
+worked around, per the working rule above.
+
+**`publish: null` is deliberate.** Left unset, electron-builder infers a GitHub feed from the repo
+and writes an `app-update.yml` into the package. Shipping a file that names an update feed would
+advertise an updater this app does not have, so publishing is disabled outright.
+
+**Three false alarms worth recording, all mine.** The packaged binary appeared to exit instantly
+with no output; it was inheriting `ELECTRON_RUN_AS_NODE=1` from the shell, which makes Electron
+behave as `node` with no script and exit 0. The installed build then appeared not to capture; the
+`settings.json` the test wrote had a UTF-8 BOM, which is not valid JSON, so the settings fell back to
+their defaults — and the default is `privacyAcknowledged: false`, which correctly captures nothing.
+Finally every clipboard write on the machine began failing with `OpenClipboard` returning
+`ERROR_ACCESS_DENIED` while nothing held the clipboard open: a lock leaked by `Stop-Process -Force`
+against Electron during a clipboard read, cleared by restarting the `cbdhsvc` Clipboard User Service.
+Each time the instrument was broken, not the app — which is the recurring lesson of this project's
+verification work, and the reason a failing probe is checked before the code it is pointed at.
+
+Two habits follow from the third. Stop the app with `CloseMainWindow` before resorting to a force
+kill, and treat a machine-wide clipboard failure as an environment fault to be proven before it is
+attributed to the addon.
 
 ---
 

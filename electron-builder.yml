@@ -1,0 +1,75 @@
+# Packaging (PLAN.md 11, M13).
+#
+# Two Windows targets from one configuration: an NSIS installer for direct download, and an MSIX
+# package for the Microsoft Store. They differ only in how they are delivered and updated — the
+# application inside them is identical.
+#
+# **There is no auto-updater, deliberately** (PLAN.md 5e). An updater is network code and would void
+# the zero-network guarantee, so the NSIS build's updates are manual downloads. The Store build gets
+# updates from the operating system instead: Windows performs them, the app ships no updater, and
+# the guarantee is untouched.
+
+# Nothing is published anywhere, which also stops electron-builder writing an `app-update.yml`
+# into the package. That file names an update feed, and shipping one would advertise an updater
+# this app deliberately does not have.
+publish: null
+
+appId: com.spool.app
+productName: Spool
+copyright: Copyright © 2026 Will Kotheimer
+
+directories:
+  output: release
+  buildResources: build
+
+# The bundles electron-vite produced, plus the tray icon read at runtime.
+files:
+  - out/**/*
+  - package.json
+
+extraResources:
+  - from: resources/tray.png
+    to: tray.png
+
+# Native modules cannot be loaded from inside an asar archive: both the clipboard addon and
+# SQLCipher are .node binaries and have to sit on the filesystem.
+asarUnpack:
+  - '**/*.node'
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  # Signing is configured through Azure Trusted Signing, which needs an Azure subscription and a
+  # validated identity. Uncomment and supply the account details once that exists; without it the
+  # installer is unsigned and Windows SmartScreen will warn (PLAN.md 11, M13).
+  #
+  # azureSignOptions:
+  #   publisherName: <the validated publisher name>
+  #   endpoint: https://<region>.codesigning.azure.net
+  #   codeSigningAccountName: <account>
+  #   certificateProfileName: <profile>
+
+nsis:
+  # A per-user install needs no administrator, which suits an app that keeps its data per-user.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Spool
+  uninstallDisplayName: Spool
+
+# The Microsoft Store target. The identity values come from the app's reservation in Partner
+# Center and cannot be guessed — build with `npm run package:store` once they are filled in.
+appx:
+  applicationId: Spool
+  displayName: Spool
+  publisherDisplayName: PUBLISHER_DISPLAY_NAME_FROM_PARTNER_CENTER
+  identityName: IDENTITY_NAME_FROM_PARTNER_CENTER
+  publisher: CN=PUBLISHER_ID_FROM_PARTNER_CENTER
+  backgroundColor: '#171614'
+  # Spool is a desktop app with a native clipboard listener and a compiled database module, so it
+  # needs full trust rather than the sandboxed app container.
+  languages: [en-US]

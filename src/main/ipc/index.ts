@@ -16,6 +16,8 @@ import type { Session } from '../session'
  */
 export interface IpcActions {
   startFreshStore: () => void
+  /** Record that the privacy statement was read, and let capture begin (PLAN.md 11, M13). */
+  acknowledgePrivacy: () => void
   setWindowState: (state: WindowStateName) => void
   /** The failsafe of PLAN.md 11, M9. Returns what it could not remove, if anything. */
   resetEverything: () => { failed: Array<{ path: string; reason: string }> }
@@ -75,6 +77,7 @@ export function registerIpc(
   ipcMain.handle(CHANNELS.resetEverything, () => actions.resetEverything())
   ipcMain.handle(CHANNELS.dismissCapacityAdvice, () => session.dismissCapacityAdvice())
   ipcMain.handle(CHANNELS.pauseCapture, () => session.pauseCapture())
+  ipcMain.handle(CHANNELS.acknowledgePrivacy, () => actions.acknowledgePrivacy())
   ipcMain.handle(CHANNELS.resumeCapture, () => session.resumeCapture())
   ipcMain.handle(CHANNELS.setStarred, (_event, spoolId: string, starred: boolean) =>
     session.setStarred(spoolId, starred)
@@ -113,6 +116,7 @@ export function registerIpc(
     ipcMain.removeHandler(CHANNELS.resetEverything)
     ipcMain.removeHandler(CHANNELS.dismissCapacityAdvice)
     ipcMain.removeHandler(CHANNELS.pauseCapture)
+    ipcMain.removeHandler(CHANNELS.acknowledgePrivacy)
     ipcMain.removeHandler(CHANNELS.resumeCapture)
     ipcMain.removeHandler(CHANNELS.setStarred)
     ipcMain.removeHandler(CHANNELS.clearSpools)

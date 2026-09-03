@@ -110,6 +110,12 @@ export class Session {
    */
   private paused = false
 
+  /**
+   * Nothing is captured until the privacy statement has been read (PLAN.md 11, M13). The default
+   * is the cautious one: a build that somehow lost its settings collects nothing until asked again.
+   */
+  private firstRun = true
+
   /** Where state is written through to. Null means this session keeps nothing (PLAN.md 11, M6). */
   private store: Store | null = null
   private storage: StorageStatus = {
@@ -206,7 +212,30 @@ export class Session {
   }
 
   /** Exposed for the IPC layer and for tests, which drive it with snapshots directly. */
+  /** The statement has been read. Capture may begin. */
+  acknowledgePrivacy(): void {
+    if (!this.firstRun) return
+
+    this.firstRun = false
+    this.publish()
+  }
+
+  /** Whether the statement still has to be shown, which the caller persists. */
+  isFirstRun(): boolean {
+    return this.firstRun
+  }
+
+  /** Set from stored settings at startup, before capture is offered. */
+  setPrivacyAcknowledged(acknowledged: boolean): void {
+    this.firstRun = !acknowledged
+    this.publish()
+  }
+
   onClipboardChange(snapshot: ClipboardSnapshot): void {
+    // Before the statement is acknowledged the listener may be running, but nothing is kept. The
+    // promise is made before anything is collected.
+    if (this.firstRun) return
+
     // The floor, and the user's own pause. Both stop capture and nothing else: every stored clip
     // stays readable, servable, and reorderable throughout (invariant 8).
     if (this.paused) {
@@ -833,6 +862,7 @@ export class Session {
           ? null
           : { byteLength: this.pendingJoin.byteLength, clips: this.pendingJoin.clips },
       capacity: this.capacityView(),
+      firstRun: this.firstRun,
       prompt: this.promptView(),
       privacy: {
         heuristics: HEURISTIC_RULES,

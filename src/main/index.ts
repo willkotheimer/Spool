@@ -55,10 +55,26 @@ if (!app.requestSingleInstanceLock()) {
     attach(openStore(paths, safeStorage))
 
     spoolSession.setSeparator(settings.separator)
+    spoolSession.setPrivacyAcknowledged(settings.privacyAcknowledged)
     spoolSession.setConsentTimeout(settings.consentTimeoutSeconds)
 
     registerIpc(spoolSession, getCompactWindow, {
       startFreshStore: () => attach(startFresh(paths, safeStorage)),
+
+      /**
+       * The statement of PLAN.md 5f has been read. Capture begins now and not before, and the
+       * answer is remembered so it is asked once (PLAN.md 11, M13).
+       */
+      acknowledgePrivacy: () => {
+        spoolSession.acknowledgePrivacy()
+        saveSettings(settingsFile, {
+          separator: spoolSession.getSeparator(),
+          window: settings.window,
+          activeSpoolId: spoolSession.getActiveSpoolId(),
+          consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds(),
+          privacyAcknowledged: true
+        })
+      },
 
       /**
        * The failsafe (PLAN.md 11, M9). The handle is closed first because Windows will not delete
@@ -83,7 +99,8 @@ if (!app.requestSingleInstanceLock()) {
           separator: spoolSession.getSeparator(),
           window: state,
           activeSpoolId: spoolSession.getActiveSpoolId(),
-          consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds()
+          consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds(),
+          privacyAcknowledged: !spoolSession.isFirstRun()
         })
       }
     })
@@ -94,7 +111,8 @@ if (!app.requestSingleInstanceLock()) {
         separator: spoolSession.getSeparator(),
         window: settings.window,
         activeSpoolId: spoolSession.getActiveSpoolId(),
-        consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds()
+        consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds(),
+        privacyAcknowledged: !spoolSession.isFirstRun()
       })
     )
 

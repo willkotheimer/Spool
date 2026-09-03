@@ -29,6 +29,7 @@ declare global {
     resetEverything(): Promise<{ failed: Array<{ path: string; reason: string }> }>
     dismissCapacityAdvice(): Promise<void>
     pauseCapture(): Promise<void>
+    acknowledgePrivacy(): Promise<void>
     resumeCapture(): Promise<void>
     setStarred(spoolId: string, starred: boolean): Promise<void>
     clearSpools(): Promise<void>

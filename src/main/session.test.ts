@@ -40,6 +40,9 @@ function started(): {
   const watcher = fakeWatcher()
   const written: string[] = []
   const session = new Session((text) => written.push(text))
+  // A session that has already been through its first run, which is what every test below is
+  // about. The first-run behaviour itself is tested by setting this back to false.
+  session.setPrivacyAcknowledged(true)
   session.startCapture({ ok: true, watcher })
   return { session, watcher, written }
 }
@@ -1522,5 +1525,38 @@ describe('the capacity floor (PLAN.md 9)', () => {
     session.pauseCapture()
     expect(session.getState().capacity.paused).toBe(true)
     expect(session.getState().spools).toHaveLength(3)
+  })
+})
+
+describe('the first run (PLAN.md 11, M13)', () => {
+  it('captures nothing until the privacy statement is acknowledged', () => {
+    const { session, watcher } = started()
+    session.setPrivacyAcknowledged(false)
+
+    watcher.change(text('copied before the statement was read'))
+
+    expect(session.getState().firstRun).toBe(true)
+    expect(session.getState().spool.count).toBe(0)
+  })
+
+  it('captures once it is acknowledged', () => {
+    const { session, watcher } = started()
+    session.setPrivacyAcknowledged(false)
+
+    session.acknowledgePrivacy()
+    watcher.change(text('copied after reading it'))
+
+    expect(session.getState().firstRun).toBe(false)
+    expect(session.getState().spool.clips.map((c) => c.preview)).toEqual(['copied after reading it'])
+  })
+
+  it('does not ask again once the answer is stored', () => {
+    const { session, watcher } = started()
+    session.setPrivacyAcknowledged(true)
+
+    watcher.change(text('a later run'))
+
+    expect(session.getState().firstRun).toBe(false)
+    expect(session.getState().spool.count).toBe(1)
   })
 })
