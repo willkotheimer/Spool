@@ -1,6 +1,6 @@
 import type { JSX } from 'react'
 import type { PrivacyFacts } from '../../shared/ipc'
-import { keyStoreName, type Platform } from '../helpers/PrivacyPanelHelper'
+import { keySealerName, type Platform } from '../helpers/PrivacyPanelHelper'
 
 /**
  * The first thing anyone sees (PLAN.md 11, M13), carrying the statement of PLAN.md 5f.
@@ -33,8 +33,9 @@ export function FirstRun({
         </p>
 
         <p className="text-spool-paper/70">
-          Your clips live in one encrypted file on this machine, and the key is held in{' '}
-          {keyStoreName(platform)} — never in a file, a constant, or the database itself.
+          Your clips live in one encrypted file on this machine, and the key that opens it is
+          sealed by {keySealerName(platform)} — never written in plaintext, in a constant, or in
+          the database itself.
         </p>
 
         <p className="text-spool-paper/70">

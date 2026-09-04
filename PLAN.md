@@ -1135,6 +1135,29 @@ which is an account to be bought rather than code to be written; the configurati
 in `electron-builder.yml`, commented, with the four values it needs. This is recorded rather than
 worked around, per the working rule above.
 
+**The packaged build had to be looked at, not only queried.** Everything verified about the
+installer up to this point had been verified by reading the database, which is main-process
+behaviour. The renderer is where development and packaging diverge — it loads over `file:` when
+packaged, and `blockSessionRequests` takes its `isPackaged` branch — so a blank window would have
+passed every check that had been run. Screenshotting the running installed app found a defect none of
+the tests could: the privacy statement told the user the database key was held in **Windows
+Credential Manager**, while §12 and `key.ts` both say DPAPI, and they are different facilities.
+
+The mechanism was then established rather than recalled. `Local State` in the app's own data
+directory holds `os_crypt.encrypted_key`, whose bytes begin with the ASCII string `DPAPI` followed by
+a DPAPI blob header — and it had already been observed earlier that the sealed key cannot be opened
+from a different user-data directory, which a Credential Manager entry would not care about. The
+statement now says the key is *sealed by Windows itself, through DPAPI*, and that it is never written
+*in plaintext* rather than never written *in a file*, which was the second overstatement in the same
+sentence: the sealed key is a file, `spool.key`. For an app whose entire claim is that its statements
+are checkable, a privacy screen naming the wrong security facility is a defect of the first order,
+and it survived two milestones of review because nothing had ever rendered that screen and read it.
+
+While the window was open the rest of the packaged-only paths were confirmed too: both summon
+hotkeys, `Win+Alt+V` and `Win+Alt+C`, bring the window up; the tray icon resolves through
+`process.resourcesPath` and renders as the spool glyph; and pressing **Start capturing** persists
+`privacyAcknowledged` and begins capture, with the first clip arriving only after the press.
+
 **`publish: null` is deliberate.** Left unset, electron-builder infers a GitHub feed from the repo
 and writes an `app-update.yml` into the package. Shipping a file that names an update feed would
 advertise an updater this app does not have, so publishing is disabled outright.
