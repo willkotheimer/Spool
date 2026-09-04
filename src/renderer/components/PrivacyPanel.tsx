@@ -1,6 +1,6 @@
 import type { JSX, ReactNode } from 'react'
 import type { PrivacyFacts } from '../../shared/ipc'
-import { dataFileDescription, keyStoreName, type Platform } from '../helpers/PrivacyPanelHelper'
+import { dataFileDescription, keySealerName, type Platform } from '../helpers/PrivacyPanelHelper'
 
 /**
  * The in-app privacy panel (PLAN.md 5f), in plain language from the user's side of the screen.
@@ -43,8 +43,9 @@ export function PrivacyPanel({
         <Section title="Where your clips live">
           <p className="text-spool-paper/70">{dataFileDescription(privacy.dataFilePath)}</p>
           <p className="text-spool-paper/70">
-            When storage arrives, clips live in one encrypted file and the key is held in{' '}
-            {keyStoreName(platform)} — never in a file, a constant, or the database itself.
+            When storage arrives, clips live in one encrypted file and the key that opens it is sealed by{' '}
+            {keySealerName(platform)} — never written in plaintext, in a constant, or in the
+            database itself.
           </p>
         </Section>
 

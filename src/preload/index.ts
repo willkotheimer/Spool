@@ -73,6 +73,9 @@ const api = {
 
   /** The capacity advisor (PLAN.md 9): it recommends, the user decides. */
   dismissCapacityAdvice: (): Promise<void> => ipcRenderer.invoke(CHANNELS.dismissCapacityAdvice),
+  /** The privacy statement has been read; capture may begin (PLAN.md 11, M13). */
+  acknowledgePrivacy: (): Promise<void> => ipcRenderer.invoke(CHANNELS.acknowledgePrivacy),
+
   /** The door that deletes nothing (PLAN.md 9). */
   pauseCapture: (): Promise<void> => ipcRenderer.invoke(CHANNELS.pauseCapture),
   resumeCapture: (): Promise<void> => ipcRenderer.invoke(CHANNELS.resumeCapture),

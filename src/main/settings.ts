@@ -25,13 +25,19 @@ export interface Settings {
   readonly activeSpoolId: string | null
   /** How long a consent prompt waits before answering itself with Skip (PLAN.md 4). */
   readonly consentTimeoutSeconds: number
+  /**
+   * Whether the privacy statement of PLAN.md 5f has been shown and acknowledged. Capture does not
+   * start until it has: the promise is made before anything is collected, not after (M13).
+   */
+  readonly privacyAcknowledged: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   separator: DEFAULT_SEPARATOR,
   window: 'compact',
   activeSpoolId: null,
-  consentTimeoutSeconds: 30
+  consentTimeoutSeconds: 30,
+  privacyAcknowledged: false
 }
 
 export function settingsPath(userDataDirectory: string): string {
@@ -73,7 +79,8 @@ export function loadSettings(path: string): Settings {
       raw.consentTimeoutSeconds >= 5 &&
       raw.consentTimeoutSeconds <= 600
         ? Math.round(raw.consentTimeoutSeconds)
-        : DEFAULT_SETTINGS.consentTimeoutSeconds
+        : DEFAULT_SETTINGS.consentTimeoutSeconds,
+    privacyAcknowledged: raw.privacyAcknowledged === true
   }
 }
 
