@@ -4,11 +4,18 @@ import { blockSessionRequests, installNetworkGuard } from './guard'
 installNetworkGuard()
 
 import { app, BrowserWindow, safeStorage, session } from 'electron'
-import { registerHotkeys, unregisterHotkeys } from './hotkeys'
+import {
+  hotkeyOverrides,
+  hotkeyViews,
+  rebindHotkey,
+  registerHotkeys,
+  resetHotkey,
+  unregisterHotkeys
+} from './hotkeys'
 import { registerIpc } from './ipc'
 import { Session } from './session'
 import { explainStorageFailure, openStore, resetEverything, startFresh, storePaths } from './store'
-import { writeClipboardText } from './clipboard/writer'
+import { sendPaste, writeClipboardText } from './clipboard/writer'
 import { createTray, reportCaptureState } from './tray'
 import { loadSettings, saveSettings, settingsPath, type WindowState } from './settings'
 import {
@@ -36,7 +43,7 @@ if (!app.requestSingleInstanceLock()) {
       app.isPackaged
     )
 
-    const spoolSession = new Session(writeClipboardText)
+    const spoolSession = new Session(writeClipboardText, sendPaste)
 
     /**
      * Open the encrypted store and restore what it holds (PLAN.md 11, M6). A failure is reported
@@ -56,6 +63,7 @@ if (!app.requestSingleInstanceLock()) {
 
     spoolSession.setSeparator(settings.separator)
     spoolSession.setPrivacyAcknowledged(settings.privacyAcknowledged)
+    spoolSession.setPasteOnServe(settings.pasteOnServe)
     spoolSession.setConsentTimeout(settings.consentTimeoutSeconds)
 
     registerIpc(spoolSession, getCompactWindow, {
@@ -72,8 +80,24 @@ if (!app.requestSingleInstanceLock()) {
           window: settings.window,
           activeSpoolId: spoolSession.getActiveSpoolId(),
           consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds(),
-          privacyAcknowledged: true
+          privacyAcknowledged: true,
+          hotkeys: hotkeyOverrides(),
+          pasteOnServe: spoolSession.getPasteOnServe()
         })
+      },
+
+      /**
+       * Take a new combination, try it, and say what happened. The answer reaches the window
+       * through the state, so a refusal is visible where the user is already looking (PLAN.md 8).
+       */
+      setHotkey: (action, accelerator) => {
+        rebindHotkey(action, accelerator)
+        spoolSession.setHotkeys(hotkeyViews())
+      },
+
+      resetHotkey: (action) => {
+        resetHotkey(action)
+        spoolSession.setHotkeys(hotkeyViews())
       },
 
       /**
@@ -100,7 +124,9 @@ if (!app.requestSingleInstanceLock()) {
           window: state,
           activeSpoolId: spoolSession.getActiveSpoolId(),
           consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds(),
-          privacyAcknowledged: !spoolSession.isFirstRun()
+          privacyAcknowledged: !spoolSession.isFirstRun(),
+          hotkeys: hotkeyOverrides(),
+          pasteOnServe: spoolSession.getPasteOnServe()
         })
       }
     })
@@ -112,18 +138,25 @@ if (!app.requestSingleInstanceLock()) {
         window: settings.window,
         activeSpoolId: spoolSession.getActiveSpoolId(),
         consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds(),
-        privacyAcknowledged: !spoolSession.isFirstRun()
+        privacyAcknowledged: !spoolSession.isFirstRun(),
+        hotkeys: hotkeyOverrides(),
+        pasteOnServe: spoolSession.getPasteOnServe()
       })
     )
 
     createCompactWindow()
     createTray()
-    registerHotkeys({
-      summon: () => toggleCompactWindow(),
-      serve: () => spoolSession.serveNext(),
-      pasteAll: () => spoolSession.pasteWholeSpool(),
-      toggleMode: () => spoolSession.toggleMode()
-    })
+    registerHotkeys(
+      {
+        summon: () => toggleCompactWindow(),
+        serve: () => spoolSession.serveNext(),
+        pasteAll: () => spoolSession.pasteWholeSpool()
+      },
+      settings.hotkeys
+    )
+    // A refused hotkey has to reach the window, not only the tray: a silently dead key is the
+    // worst outcome, because the user concludes the app is broken (PLAN.md 8).
+    spoolSession.setHotkeys(hotkeyViews())
 
     // Watching starts once there is a window to report to, so a failure to load the addon is
     // visible rather than lost to a console nobody is reading (PLAN.md 8).

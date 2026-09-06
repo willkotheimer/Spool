@@ -6,6 +6,7 @@ import {
   type SeparatorKind,
   type WindowStateName
 } from '../../shared/ipc'
+import type { HotkeyAction } from '../../shared/ipc'
 import type { Session } from '../session'
 
 /**
@@ -18,6 +19,10 @@ export interface IpcActions {
   startFreshStore: () => void
   /** Record that the privacy statement was read, and let capture begin (PLAN.md 11, M13). */
   acknowledgePrivacy: () => void
+  /** Try a new global hotkey for one action, and remember it if the OS grants it (PLAN.md 8). */
+  setHotkey: (action: HotkeyAction, accelerator: string) => void
+  /** Put one action back to its shipped default. */
+  resetHotkey: (action: HotkeyAction) => void
   setWindowState: (state: WindowStateName) => void
   /** The failsafe of PLAN.md 11, M9. Returns what it could not remove, if anything. */
   resetEverything: () => { failed: Array<{ path: string; reason: string }> }
@@ -78,6 +83,16 @@ export function registerIpc(
   ipcMain.handle(CHANNELS.dismissCapacityAdvice, () => session.dismissCapacityAdvice())
   ipcMain.handle(CHANNELS.pauseCapture, () => session.pauseCapture())
   ipcMain.handle(CHANNELS.acknowledgePrivacy, () => actions.acknowledgePrivacy())
+  ipcMain.handle(CHANNELS.toggleMode, () => session.toggleMode())
+  ipcMain.handle(CHANNELS.setPasteOnServe, (_event, enabled: boolean) =>
+    session.setPasteOnServe(enabled)
+  )
+  ipcMain.handle(CHANNELS.setHotkey, (_event, action: HotkeyAction, accelerator: string) =>
+    actions.setHotkey(action, accelerator)
+  )
+  ipcMain.handle(CHANNELS.resetHotkey, (_event, action: HotkeyAction) =>
+    actions.resetHotkey(action)
+  )
   ipcMain.handle(CHANNELS.resumeCapture, () => session.resumeCapture())
   ipcMain.handle(CHANNELS.setStarred, (_event, spoolId: string, starred: boolean) =>
     session.setStarred(spoolId, starred)
@@ -117,6 +132,10 @@ export function registerIpc(
     ipcMain.removeHandler(CHANNELS.dismissCapacityAdvice)
     ipcMain.removeHandler(CHANNELS.pauseCapture)
     ipcMain.removeHandler(CHANNELS.acknowledgePrivacy)
+    ipcMain.removeHandler(CHANNELS.toggleMode)
+    ipcMain.removeHandler(CHANNELS.setPasteOnServe)
+    ipcMain.removeHandler(CHANNELS.setHotkey)
+    ipcMain.removeHandler(CHANNELS.resetHotkey)
     ipcMain.removeHandler(CHANNELS.resumeCapture)
     ipcMain.removeHandler(CHANNELS.setStarred)
     ipcMain.removeHandler(CHANNELS.clearSpools)

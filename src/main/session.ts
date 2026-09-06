@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type {
   AppState,
   ConsentChoice,
+  HotkeyView,
   Notice,
   PendingPrompt,
   StorageStatus
@@ -116,6 +117,12 @@ export class Session {
    */
   private firstRun = true
 
+  /**
+   * What the operating system granted, so the window can say which keys are live (PLAN.md 8). The
+   * session does not own hotkeys; it carries their status because it is what assembles AppState.
+   */
+  private hotkeys: readonly HotkeyView[] = []
+
   /** Where state is written through to. Null means this session keeps nothing (PLAN.md 11, M6). */
   private store: Store | null = null
   private storage: StorageStatus = {
@@ -132,7 +139,28 @@ export class Session {
    * `writeText` is injected rather than imported so that this class never reaches for Electron —
    * which is also what lets every rule below be tested without launching the app.
    */
-  constructor(private readonly writeText: (text: string) => void) {}
+  /**
+   * Whether serving also pastes (PLAN.md 8). On by default: unspooling into the document you are
+   * already typing in is the thing this app is for, and making it two keystrokes made the second
+   * one feel like a tax. It stays a setting because a synthesized Ctrl+V does nothing in terminals
+   * that paste with Ctrl+Shift+V, and because some people would rather place than place-and-type.
+   */
+  private pasteOnServe = true
+
+  constructor(
+    private readonly writeText: (text: string) => void,
+    /** Synthesize the paste. Returns false when it declined — our own window was in front. */
+    private readonly paste: () => boolean = () => false
+  ) {}
+
+  setPasteOnServe(enabled: boolean): void {
+    this.pasteOnServe = enabled
+    this.publish()
+  }
+
+  getPasteOnServe(): boolean {
+    return this.pasteOnServe
+  }
 
   /**
    * Attach a store and restore what it holds (PLAN.md 11, M6). Everything the user had — clips,
@@ -212,6 +240,12 @@ export class Session {
   }
 
   /** Exposed for the IPC layer and for tests, which drive it with snapshots directly. */
+  /** Report what the global hotkeys came out as, so a refused one can be seen and fixed. */
+  setHotkeys(hotkeys: readonly HotkeyView[]): void {
+    this.hotkeys = hotkeys
+    this.publish()
+  }
+
   /** The statement has been read. Capture may begin. */
   acknowledgePrivacy(): void {
     if (!this.firstRun) return
@@ -343,6 +377,12 @@ export class Session {
       pendingSelfWrite: result.clip.content
     }
     this.notice = null
+
+    // Then put it where the user was typing. The clip stays on the clipboard afterwards, so the
+    // plan's reason for keeping these separate — serve once, paste into four places — still holds:
+    // this adds the first paste rather than taking the others away (PLAN.md 8).
+    if (this.pasteOnServe) this.paste()
+
     this.publish()
   }
 
@@ -704,10 +744,17 @@ export class Session {
       }))
     )
 
-    const removable = clearing
-      .map((spool) => spool.id)
-      .filter((id) => id !== this.state.spool.id)
+    const removable = clearing.map((spool) => spool.id)
     if (removable.length === 0) return
+
+    // The active spool is cleared like any other. It used to be skipped, while the button went on
+    // counting it — so a user whose only unstarred spool was the active one pressed "Clear 1 spool"
+    // and watched nothing happen. The button states what it spares (PLAN.md 9); sparing something
+    // it does not name is the one thing it must not do.
+    if (removable.includes(this.state.spool.id)) {
+      const fallback = this.otherSpools.find((spool) => spool.kind === 'default')
+      if (fallback !== undefined) this.activate(fallback, { keepLeaving: false })
+    }
 
     this.otherSpools = this.otherSpools.filter((spool) => !removable.includes(spool.id))
     this.store?.deleteSpools(removable)
@@ -863,6 +910,8 @@ export class Session {
           : { byteLength: this.pendingJoin.byteLength, clips: this.pendingJoin.clips },
       capacity: this.capacityView(),
       firstRun: this.firstRun,
+      hotkeys: this.hotkeys,
+      pasteOnServe: this.pasteOnServe,
       prompt: this.promptView(),
       privacy: {
         heuristics: HEURISTIC_RULES,

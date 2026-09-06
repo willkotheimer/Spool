@@ -117,6 +117,25 @@ export function SettingsPanel({ state, onBack }: { state: AppState; onBack: () =
           </p>
         </Section>
 
+        <Section title="Unspooling">
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={state.pasteOnServe}
+              onChange={(event) => void window.spool.setPasteOnServe(event.target.checked)}
+              className="mt-0.5"
+            />
+            <span className="text-spool-paper/50">
+              Paste the clip as well as putting it on the clipboard
+            </span>
+          </label>
+          <p className="text-[10px] leading-snug text-spool-paper/35">
+            The clip stays on the clipboard either way, so you can paste it again elsewhere. Turn
+            this off if you work in a terminal that pastes with Ctrl+Shift+V, where a synthesized
+            Ctrl+V does nothing.
+          </p>
+        </Section>
+
         <Section title="How long a prompt waits">
           <label className="flex items-center gap-2">
             <input

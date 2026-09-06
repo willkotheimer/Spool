@@ -1,11 +1,13 @@
 import { useState, type JSX } from 'react'
 import { capacityLabel } from '../helpers/ClipListHelper'
+import { refusedCount } from '../helpers/HotkeysPanelHelper'
 import { useAppState } from '../state/useAppState'
 import { CapacityAdvisor } from './CapacityAdvisor'
 import { ClipList } from './ClipList'
 import { FirstRun } from './FirstRun'
 import { ExpandedView } from './ExpandedView'
 import { ConsentPrompt } from './ConsentPrompt'
+import { HotkeysPanel } from './HotkeysPanel'
 import { PrivacyPanel } from './PrivacyPanel'
 import { SettingsPanel } from './SettingsPanel'
 
@@ -13,11 +15,21 @@ import { SettingsPanel } from './SettingsPanel'
  * The compact window (PLAN.md 8): the active spool's name, its mode pill, the clip that serves
  * next, the clips behind it, and the privacy affordance. This is the state the app lives in.
  */
-function Hint({ keys, children }: { keys: string; children: string }): JSX.Element {
+function Hint({
+  keys,
+  live,
+  children
+}: {
+  keys: string
+  live: boolean
+  children: string
+}): JSX.Element {
   return (
     <div className="flex gap-1.5">
-      <dt className="shrink-0 text-spool-paper/60">{keys}</dt>
-      <dd className="truncate">{children}</dd>
+      <dt className={live ? 'shrink-0 text-spool-paper/60' : 'shrink-0 text-spool-paper/25 line-through'}>
+        {keys}
+      </dt>
+      <dd className={live ? 'truncate' : 'truncate text-spool-paper/30'}>{children}</dd>
     </div>
   )
 }
@@ -26,9 +38,11 @@ export function App(): JSX.Element {
   const [showPrivacy, setShowPrivacy] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-  const { summonHotkey, serveHotkey, pasteAllHotkey, modeHotkey, platform } = window.spool
+  const [showHotkeys, setShowHotkeys] = useState(false)
+  const { platform } = window.spool
   const state = useAppState()
-  const { spool, notice, capture, prompt, privacy, storage, capacity } = state
+  const { spool, notice, capture, prompt, privacy, storage, capacity, hotkeys } = state
+  const dead = refusedCount(hotkeys)
 
   // Before anything else: the statement, and nothing captured until it is acknowledged.
   if (state.firstRun) {
@@ -61,6 +75,10 @@ export function App(): JSX.Element {
     return <SettingsPanel state={state} onBack={() => setShowSettings(false)} />
   }
 
+  if (showHotkeys) {
+    return <HotkeysPanel hotkeys={hotkeys} onBack={() => setShowHotkeys(false)} />
+  }
+
   if (showPrivacy) {
     return (
       <PrivacyPanel platform={platform} privacy={privacy} onBack={() => setShowPrivacy(false)} />
@@ -73,9 +91,18 @@ export function App(): JSX.Element {
         <h1 className="truncate text-sm font-semibold tracking-tight">{spool.name}</h1>
         <div className="flex shrink-0 items-center gap-2">
           <span className="text-[10px] text-spool-paper/40">{capacityLabel(spool)}</span>
-          <span className="rounded-full border border-spool-thread/50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-spool-thread uppercase">
+          <button
+            type="button"
+            onClick={() => void window.spool.toggleMode()}
+            title={
+              spool.mode === 'fifo'
+                ? 'Oldest first. Click for newest first.'
+                : 'Newest first. Click for oldest first.'
+            }
+            className="rounded-full border border-spool-thread/50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-spool-thread uppercase hover:bg-spool-thread/15"
+          >
             {spool.mode}
-          </span>
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -138,12 +165,25 @@ export function App(): JSX.Element {
       <footer className="px-4 pb-3 text-[11px] text-spool-paper/40">
         <div className="flex items-end justify-between gap-2">
           <dl className="min-w-0 space-y-0.5">
-            <Hint keys={serveHotkey}>serve the next clip</Hint>
-            <Hint keys={pasteAllHotkey}>put the whole spool on the clipboard</Hint>
-            <Hint keys={modeHotkey}>{spool.mode === 'fifo' ? 'newest first' : 'oldest first'}</Hint>
-            <Hint keys={summonHotkey}>show and hide</Hint>
+            {hotkeys.map((hotkey) => (
+              <Hint key={hotkey.action} keys={hotkey.described} live={hotkey.claimed}>
+                {hotkey.label.toLowerCase()}
+              </Hint>
+            ))}
           </dl>
           <span className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() => setShowHotkeys(true)}
+              title={dead > 0 ? `${dead} hotkeys are refused by other apps` : 'Hotkeys'}
+              className={
+                dead > 0
+                  ? 'rounded px-2 py-1 font-semibold text-spool-thread hover:bg-spool-thread/15'
+                  : 'rounded px-2 py-1 text-spool-paper/60 hover:bg-spool-paper/10'
+              }
+            >
+              {dead > 0 ? `? ${dead}` : '?'}
+            </button>
             <button
               type="button"
               onClick={() => setShowSettings(true)}

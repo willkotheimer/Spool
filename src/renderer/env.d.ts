@@ -5,10 +5,6 @@ import type { AppState, ConsentChoice, SeparatorKind, WindowStateName } from '..
 declare global {
   interface SpoolApi {
     readonly platform: 'win32' | 'darwin' | 'linux'
-    readonly summonHotkey: string
-    readonly serveHotkey: string
-    readonly pasteAllHotkey: string
-    readonly modeHotkey: string
     getState(): Promise<AppState>
     answerConsent(choice: ConsentChoice): Promise<void>
     startFreshStore(): Promise<void>
@@ -30,6 +26,10 @@ declare global {
     dismissCapacityAdvice(): Promise<void>
     pauseCapture(): Promise<void>
     acknowledgePrivacy(): Promise<void>
+    toggleMode(): Promise<void>
+    setPasteOnServe(enabled: boolean): Promise<void>
+    setHotkey(action: HotkeyAction, accelerator: string): Promise<void>
+    resetHotkey(action: HotkeyAction): Promise<void>
     resumeCapture(): Promise<void>
     setStarred(spoolId: string, starred: boolean): Promise<void>
     clearSpools(): Promise<void>

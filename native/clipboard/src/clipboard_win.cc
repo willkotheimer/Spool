@@ -304,10 +304,52 @@ Napi::Value IsSupported(const Napi::CallbackInfo& info) {
   return Napi::Boolean::New(info.Env(), true);
 }
 
+// Synthesize Ctrl+V into whatever window has focus (PLAN.md 8).
+//
+// This is *output*, not input: SendInput asks Windows to deliver a keystroke, and needs no
+// permission, no elevation, and no keyboard hook. That distinction is the whole reason it is
+// acceptable here. The macOS equivalent would require Accessibility permission, which is permission
+// to read every keystroke on the machine, and an app whose claim is that it cannot spy on you must
+// not ask for it — so this stays a Windows-only capability rather than a cross-platform one.
+//
+// It refuses when Spool itself is in front. Serving is meant to put a clip into the document you
+// were already working in; pasting into our own window would type the clip into the app that just
+// produced it, which is never what anyone meant.
+Napi::Value SendPaste(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  HWND foreground = GetForegroundWindow();
+  if (foreground == nullptr) return Napi::Boolean::New(env, false);
+
+  DWORD foreground_pid = 0;
+  GetWindowThreadProcessId(foreground, &foreground_pid);
+  if (foreground_pid == GetCurrentProcessId()) return Napi::Boolean::New(env, false);
+
+  INPUT inputs[4] = {};
+
+  inputs[0].type = INPUT_KEYBOARD;
+  inputs[0].ki.wVk = VK_CONTROL;
+
+  inputs[1].type = INPUT_KEYBOARD;
+  inputs[1].ki.wVk = 'V';
+
+  inputs[2].type = INPUT_KEYBOARD;
+  inputs[2].ki.wVk = 'V';
+  inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+
+  inputs[3].type = INPUT_KEYBOARD;
+  inputs[3].ki.wVk = VK_CONTROL;
+  inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+
+  const UINT sent = SendInput(4, inputs, sizeof(INPUT));
+  return Napi::Boolean::New(env, sent == 4);
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("start", Napi::Function::New(env, Start));
   exports.Set("stop", Napi::Function::New(env, Stop));
   exports.Set("isSupported", Napi::Function::New(env, IsSupported));
+  exports.Set("sendPaste", Napi::Function::New(env, SendPaste));
   return exports;
 }
 

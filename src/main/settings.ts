@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import type { Action } from './accelerators'
 import { DEFAULT_SEPARATOR, type SeparatorKind } from './core/join'
 
 /**
@@ -30,6 +31,13 @@ export interface Settings {
    * start until it has: the promise is made before anything is collected, not after (M13).
    */
   readonly privacyAcknowledged: boolean
+  /**
+   * Hotkeys the user has rebound, by action. Absent means "use the default" — which is not the same
+   * as an empty string, and is why this is a sparse map rather than a full record (PLAN.md 8).
+   */
+  readonly hotkeys: Partial<Record<Action, string>>
+  /** Whether serving a clip also pastes it into the foreground window (PLAN.md 8). */
+  readonly pasteOnServe: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -37,7 +45,9 @@ export const DEFAULT_SETTINGS: Settings = {
   window: 'compact',
   activeSpoolId: null,
   consentTimeoutSeconds: 30,
-  privacyAcknowledged: false
+  privacyAcknowledged: false,
+  hotkeys: {},
+  pasteOnServe: true
 }
 
 export function settingsPath(userDataDirectory: string): string {
@@ -52,6 +62,25 @@ const SEPARATORS: readonly SeparatorKind[] = [
   'space',
   'none'
 ]
+
+const HOTKEY_ACTIONS: readonly Action[] = ['summon', 'serve', 'pasteAll']
+
+/**
+ * Take only bindings for actions that exist, and only strings. A hand-edited file should cost the
+ * user a hotkey, not their app — and an unrecognised action silently becoming a binding would be a
+ * shortcut nothing can ever release.
+ */
+function readHotkeys(raw: unknown): Partial<Record<Action, string>> {
+  if (typeof raw !== 'object' || raw === null) return {}
+
+  const source = raw as Record<string, unknown>
+  const chosen: Partial<Record<Action, string>> = {}
+  for (const action of HOTKEY_ACTIONS) {
+    const value = source[action]
+    if (typeof value === 'string' && value.length > 0) chosen[action] = value
+  }
+  return chosen
+}
 
 /**
  * Read the file, taking only what is recognised. A settings file that has been hand-edited into
@@ -80,7 +109,10 @@ export function loadSettings(path: string): Settings {
       raw.consentTimeoutSeconds <= 600
         ? Math.round(raw.consentTimeoutSeconds)
         : DEFAULT_SETTINGS.consentTimeoutSeconds,
-    privacyAcknowledged: raw.privacyAcknowledged === true
+    privacyAcknowledged: raw.privacyAcknowledged === true,
+    hotkeys: readHotkeys(raw.hotkeys),
+    // Absent means on: the default is the behaviour, and only an explicit false turns it off.
+    pasteOnServe: raw.pasteOnServe !== false
   }
 }
 

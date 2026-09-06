@@ -26,6 +26,8 @@ interface NativeAddon {
   start(callback: (snapshot: NativeSnapshot) => void): void
   stop(): void
   isSupported(): boolean
+  /** Synthesize Ctrl+V into the foreground window. False when it refused (PLAN.md 8). */
+  sendPaste(): boolean
 }
 
 export type WatcherLoad =

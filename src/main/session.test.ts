@@ -32,14 +32,14 @@ const text = (value: string, sourceApp: string | null = null): ClipboardSnapshot
   sourceApp
 })
 
-function started(): {
+function started(paste: () => boolean = () => false): {
   session: Session
   watcher: ReturnType<typeof fakeWatcher>
   written: string[]
 } {
   const watcher = fakeWatcher()
   const written: string[] = []
-  const session = new Session((text) => written.push(text))
+  const session = new Session((text) => written.push(text), paste)
   // A session that has already been through its first run, which is what every test below is
   // about. The first-run behaviour itself is tested by setting this back to false.
   session.setPrivacyAcknowledged(true)
@@ -276,13 +276,56 @@ describe('serving (PLAN.md 11, M4)', () => {
     expect(nextPreview()).toBe('A')
   })
 
+  it('pastes the clip it serves into the window in front', () => {
+    let pastes = 0
+    const { session, watcher, written } = started(() => {
+      pastes += 1
+      return true
+    })
+    watcher.change(text('into the form'))
+
+    session.serveNext()
+
+    expect(written).toEqual(['into the form'])
+    expect(pastes).toBe(1)
+  })
+
+  it('serves without pasting when the user has turned that off', () => {
+    let pastes = 0
+    const { session, watcher, written } = started(() => {
+      pastes += 1
+      return true
+    })
+    session.setPasteOnServe(false)
+    watcher.change(text('placed, not typed'))
+
+    session.serveNext()
+
+    expect(written).toEqual(['placed, not typed'])
+    expect(pastes).toBe(0)
+  })
+
+  it('does not paste when there was nothing to serve', () => {
+    let pastes = 0
+    const { session } = started(() => {
+      pastes += 1
+      return true
+    })
+
+    session.serveNext()
+
+    expect(pastes).toBe(0)
+    expect(session.getState().notice?.category).toBe('nothing_to_paste')
+  })
+
   it('leaves the served clip on the clipboard to be pasted as often as the user likes', () => {
     const { session, watcher, written } = started()
     watcher.change(text('once served'))
 
     session.serveNext()
 
-    // Pasting is the user pressing Ctrl+V; the app is not involved and writes nothing further.
+    // Serving now pastes once as well (PLAN.md 8), but it writes to the clipboard exactly once —
+    // so the clip is still there to be pasted by hand, as often as the user likes.
     expect(written).toEqual(['once served'])
     expect(session.getState().spool.count).toBe(1)
   })
@@ -1213,6 +1256,31 @@ describe('starred spools (PLAN.md 10)', () => {
 
     expect(names(session)).toEqual(['Default spool', 'Keep me'])
     expect(saved.deletedBatches).toEqual([['go1', 'go2']])
+  })
+
+  // The bug this exists for: the button counted every unstarred spool, including the active one,
+  // while the action skipped the active one. With a single unstarred spool that happened to be
+  // active, "Clear 1 spool" did nothing at all.
+  it('clears the active spool too, because the button counts it', () => {
+    const { session, saved } = withSpools([defaultSpool, sized('only', 'Only one', MIB)])
+    session.setActiveSpool('only')
+    expect(session.getState().spool.name).toBe('Only one')
+
+    session.clearSpools()
+
+    expect(names(session)).toEqual(['Default spool'])
+    expect(saved.deletedBatches).toEqual([['only']])
+  })
+
+  it('falls back to the default spool when clearing takes the active one away', () => {
+    const { session } = withSpools([defaultSpool, sized('a', 'Alpha', MIB), sized('b', 'Beta', MIB)])
+    session.setActiveSpool('a')
+
+    session.clearSpools()
+
+    // Something always has to be catching a copy (PLAN.md 2).
+    expect(session.getState().spool.name).toBe('Default spool')
+    expect(names(session)).toEqual(['Default spool'])
   })
 
   it('never offers a starred spool to the capacity advisor', () => {

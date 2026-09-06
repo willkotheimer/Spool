@@ -21,10 +21,17 @@ Napi::Value IsSupported(const Napi::CallbackInfo& info) {
   return Napi::Boolean::New(info.Env(), false);
 }
 
+// Always false off Windows. Synthesizing a paste on macOS would need Accessibility permission —
+// permission to read every keystroke — which this app will not ask for (PLAN.md 8).
+Napi::Value SendPaste(const Napi::CallbackInfo& info) {
+  return Napi::Boolean::New(info.Env(), false);
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("start", Napi::Function::New(env, Start));
   exports.Set("stop", Napi::Function::New(env, Stop));
   exports.Set("isSupported", Napi::Function::New(env, IsSupported));
+  exports.Set("sendPaste", Napi::Function::New(env, SendPaste));
   return exports;
 }
 
