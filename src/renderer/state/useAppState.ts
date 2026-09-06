@@ -30,6 +30,7 @@ const initialState: AppState = {
   spools: [],
   pendingJoin: null,
   firstRun: false,
+  hotkeys: [],
   capacity: {
     measure: 'bytes',
     used: 0,

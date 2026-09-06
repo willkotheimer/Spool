@@ -9,6 +9,27 @@
 
 export type Mode = 'fifo' | 'lifo'
 
+/** The actions that carry a global hotkey. Toggling the mode is done in the window (PLAN.md 8). */
+export type HotkeyAction = 'summon' | 'serve' | 'pasteAll'
+
+/**
+ * One binding, and whether the operating system granted it. `claimed: false` is the case that
+ * matters: another application owns the combination, the key is dead, and the panel has to say so
+ * rather than leave the user pressing it (PLAN.md 8).
+ */
+export interface HotkeyView {
+  readonly action: HotkeyAction
+  readonly label: string
+  readonly hint: string
+  /** The Electron accelerator, which is what a rebinding sends back. */
+  readonly accelerator: string
+  /** The same combination as a person reads it. */
+  readonly described: string
+  readonly claimed: boolean
+  /** Whether this is the shipped default or something the user chose. */
+  readonly isDefault: boolean
+}
+
 /**
  * `nothing_to_paste` is the odd one out: the decline categories are said once per session, but a
  * serve on an empty spool has to answer every time it is asked (PLAN.md 3).
@@ -177,6 +198,8 @@ export interface AppState {
    * (PLAN.md 11, M13).
    */
   readonly firstRun: boolean
+  /** Every hotkey and whether it is live, for the panel that doubles as the reference (PLAN.md 8). */
+  readonly hotkeys: readonly HotkeyView[]
 }
 
 /** The channel names, in one place so the two sides cannot drift apart. */
@@ -202,6 +225,9 @@ export const CHANNELS = {
   dismissCapacityAdvice: 'spool:dismiss-capacity-advice',
   pauseCapture: 'spool:pause-capture',
   acknowledgePrivacy: 'spool:acknowledge-privacy',
+  toggleMode: 'spool:toggle-mode',
+  setHotkey: 'spool:set-hotkey',
+  resetHotkey: 'spool:reset-hotkey',
   resumeCapture: 'spool:resume-capture',
   deleteSpools: 'spool:delete-spools',
   setStarred: 'spool:set-starred',

@@ -1,9 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { describeAction, type Platform } from '../main/accelerators'
+import type { Platform } from '../main/accelerators'
 import {
   CHANNELS,
   type AppState,
   type ConsentChoice,
+  type HotkeyAction,
   type SeparatorKind,
   type WindowStateName
 } from '../shared/ipc'
@@ -16,10 +17,6 @@ import {
  */
 const api = {
   platform: process.platform as Platform,
-  summonHotkey: describeAction('summon', process.platform as Platform),
-  serveHotkey: describeAction('serve', process.platform as Platform),
-  pasteAllHotkey: describeAction('pasteAll', process.platform as Platform),
-  modeHotkey: describeAction('toggleMode', process.platform as Platform),
 
   /** The state as it stands right now, for a renderer that has just mounted. */
   getState: (): Promise<AppState> => ipcRenderer.invoke(CHANNELS.getState),
@@ -73,6 +70,17 @@ const api = {
 
   /** The capacity advisor (PLAN.md 9): it recommends, the user decides. */
   dismissCapacityAdvice: (): Promise<void> => ipcRenderer.invoke(CHANNELS.dismissCapacityAdvice),
+  /** Change direction. On the mode pill rather than a hotkey (PLAN.md 8). */
+  toggleMode: (): Promise<void> => ipcRenderer.invoke(CHANNELS.toggleMode),
+
+  /** Try a new combination for one action; the answer says whether the OS granted it. */
+  setHotkey: (action: HotkeyAction, accelerator: string): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.setHotkey, action, accelerator),
+
+  /** Put one action back to its shipped default. */
+  resetHotkey: (action: HotkeyAction): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.resetHotkey, action),
+
   /** The privacy statement has been read; capture may begin (PLAN.md 11, M13). */
   acknowledgePrivacy: (): Promise<void> => ipcRenderer.invoke(CHANNELS.acknowledgePrivacy),
 

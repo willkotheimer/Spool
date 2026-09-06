@@ -1215,6 +1215,31 @@ describe('starred spools (PLAN.md 10)', () => {
     expect(saved.deletedBatches).toEqual([['go1', 'go2']])
   })
 
+  // The bug this exists for: the button counted every unstarred spool, including the active one,
+  // while the action skipped the active one. With a single unstarred spool that happened to be
+  // active, "Clear 1 spool" did nothing at all.
+  it('clears the active spool too, because the button counts it', () => {
+    const { session, saved } = withSpools([defaultSpool, sized('only', 'Only one', MIB)])
+    session.setActiveSpool('only')
+    expect(session.getState().spool.name).toBe('Only one')
+
+    session.clearSpools()
+
+    expect(names(session)).toEqual(['Default spool'])
+    expect(saved.deletedBatches).toEqual([['only']])
+  })
+
+  it('falls back to the default spool when clearing takes the active one away', () => {
+    const { session } = withSpools([defaultSpool, sized('a', 'Alpha', MIB), sized('b', 'Beta', MIB)])
+    session.setActiveSpool('a')
+
+    session.clearSpools()
+
+    // Something always has to be catching a copy (PLAN.md 2).
+    expect(session.getState().spool.name).toBe('Default spool')
+    expect(names(session)).toEqual(['Default spool'])
+  })
+
   it('never offers a starred spool to the capacity advisor', () => {
     const { session } = withSpools(
       [

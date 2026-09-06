@@ -656,14 +656,20 @@ All rebindable. The defaults deliberately avoid paste-adjacent combinations:
 
 | Action | Windows | macOS |
 |---|---|---|
-| Summon / dismiss | `Win + Alt + V` or `Win + Alt + C` | `Ctrl + Option + V` or `Ctrl + Option + C` |
-| Serve next clip | `Win + Alt + N` | `Ctrl + Option + N` |
-| Paste the whole spool (§3) | `Win + Alt + A` | `Ctrl + Option + A` |
-| Toggle FIFO / LIFO | `Win + Alt + M` | `Ctrl + Option + M` |
+| Summon / dismiss | `Win + Alt + C` | `Ctrl + Option + C` |
+| Unspool the next clip | `Win + Alt + U` | `Ctrl + Option + U` |
+| Paste the whole spool (§3) | `Win + Alt + V` | `Ctrl + Option + V` |
+| Toggle FIFO / LIFO | *no hotkey — the mode pill* | *no hotkey — the mode pill* |
 
-Summon carries two bindings on each platform, because both are things a hand reaches for: `V` for the
-paste-adjacent muscle memory, `C` for "clipboard". Either summons; neither is primary. The other three
-actions take one binding each.
+`C` is for clipboard and opens the window; `V` pastes, the way `Ctrl+V` pastes, except that it pastes
+the whole spool; `U` unspools the next clip. **Unspooling owns the repeat gesture** — press `U` again
+and again and clips come off in the mode's order — which is why pasting the whole spool is not a
+double-press of anything. A repeated press means "give me the next one"; spending it on "give me
+everything at once" would hand the unspool gesture to the one action that makes the ordering moot.
+
+**Toggling the mode has no hotkey, deliberately.** It is something you do while looking at the spool,
+not while typing in another application, so it lives on the mode pill in the window and spends no
+global combination — which are scarce, as the measurement below shows.
 
 A global hotkey **shadows the foreground application**, so the defaults matter more than they look.
 Two hazards worth stating outright:
@@ -685,6 +691,29 @@ must be surfaced, not swallowed** — a silently dead hotkey is the worst outcom
 concludes the app is broken. On failure, say which combination was refused and open the rebinding UI.
 An action with two bindings is live as long as one of them is claimed, and the refused one is still
 named — a half-working hotkey the user cannot see the shape of is its own kind of broken.
+
+**Measured, and the original defaults were wrong.** Probing all twenty-six `Win+Alt+<letter>`
+combinations on Windows 11 found **thirteen already owned**: `A B D F G K M N R S T W Y`. `N` is
+OneNote's Quick Note. `M`, `R`, `G`, `B`, `T` and `W` are the Xbox Game Bar, **which ships with
+Windows** — so `Win+Alt+M` was not unlucky, it was dead for nearly every Windows 11 user, and
+`Win+Alt+N` for anyone with Office. Two of the four original defaults never worked. The user found
+this the way the paragraph above predicts: by pressing keys that did nothing and concluding the app
+was broken, while the tray quietly held the explanation nobody opens the tray to read.
+
+The lesson is not that better letters exist. It is that **no default can be right on every machine**,
+because which combinations are free depends on what else is installed — so the rebinding UI is not a
+nicety, it is the only correct answer, and the refusal has to appear in the window rather than the
+tray. The `?` button carries a count of dead keys for exactly this reason: it is the only way a
+refusal reaches someone who has not gone looking for one.
+
+`Ctrl+Alt` was measured completely free on the same machine and is still **not** the Windows default,
+because free-on-a-US-layout is not free: it is `AltGr` abroad, where `Ctrl+Alt+C` types `ć`. It is
+offered as a rebinding choice carrying that warning.
+
+Rebinding is two dropdowns and a *try*, not "press the combination you want", because the Windows
+shell eats `Win`-key presses before a renderer sees them — a capture box could not hear the family the
+defaults live in. Picking and then attempting is also the honest shape: the operating system decides
+who gets a combination, not this app.
 
 ---
 

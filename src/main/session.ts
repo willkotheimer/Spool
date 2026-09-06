@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type {
   AppState,
   ConsentChoice,
+  HotkeyView,
   Notice,
   PendingPrompt,
   StorageStatus
@@ -116,6 +117,12 @@ export class Session {
    */
   private firstRun = true
 
+  /**
+   * What the operating system granted, so the window can say which keys are live (PLAN.md 8). The
+   * session does not own hotkeys; it carries their status because it is what assembles AppState.
+   */
+  private hotkeys: readonly HotkeyView[] = []
+
   /** Where state is written through to. Null means this session keeps nothing (PLAN.md 11, M6). */
   private store: Store | null = null
   private storage: StorageStatus = {
@@ -212,6 +219,12 @@ export class Session {
   }
 
   /** Exposed for the IPC layer and for tests, which drive it with snapshots directly. */
+  /** Report what the global hotkeys came out as, so a refused one can be seen and fixed. */
+  setHotkeys(hotkeys: readonly HotkeyView[]): void {
+    this.hotkeys = hotkeys
+    this.publish()
+  }
+
   /** The statement has been read. Capture may begin. */
   acknowledgePrivacy(): void {
     if (!this.firstRun) return
@@ -704,10 +717,17 @@ export class Session {
       }))
     )
 
-    const removable = clearing
-      .map((spool) => spool.id)
-      .filter((id) => id !== this.state.spool.id)
+    const removable = clearing.map((spool) => spool.id)
     if (removable.length === 0) return
+
+    // The active spool is cleared like any other. It used to be skipped, while the button went on
+    // counting it — so a user whose only unstarred spool was the active one pressed "Clear 1 spool"
+    // and watched nothing happen. The button states what it spares (PLAN.md 9); sparing something
+    // it does not name is the one thing it must not do.
+    if (removable.includes(this.state.spool.id)) {
+      const fallback = this.otherSpools.find((spool) => spool.kind === 'default')
+      if (fallback !== undefined) this.activate(fallback, { keepLeaving: false })
+    }
 
     this.otherSpools = this.otherSpools.filter((spool) => !removable.includes(spool.id))
     this.store?.deleteSpools(removable)
@@ -863,6 +883,7 @@ export class Session {
           : { byteLength: this.pendingJoin.byteLength, clips: this.pendingJoin.clips },
       capacity: this.capacityView(),
       firstRun: this.firstRun,
+      hotkeys: this.hotkeys,
       prompt: this.promptView(),
       privacy: {
         heuristics: HEURISTIC_RULES,
