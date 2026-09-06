@@ -5,7 +5,21 @@ on by copying and play off one at a time — or all at once, in the order you ar
 or backwards, rearranging by dragging. Nothing it captures can leave the machine, and that property
 is enforced by the build, not by good intentions.
 
-Electron + React. Windows first, macOS once an Apple Developer account exists (M14). No cloud, no account, no telemetry, no model.
+Electron + React. **Windows.** No cloud, no account, no telemetry, no model.
+
+### Scope: this is a Windows application
+
+Written first as "Windows first, macOS once an Apple Developer account exists", and narrowed on
+purpose. macOS is **out of scope**: it costs an Apple Developer membership, a Mac to notarize from,
+and a second native clipboard implementation, in exchange for reaching a platform this app was never
+being built for. The Microsoft Store asks nothing about other platforms — an MSIX declares
+`TargetDeviceFamily Name="Windows.Desktop"` and that is the end of it — so nothing downstream wants
+macOS either. Linux is welcome if it happens to work; it is not a goal, and nothing is owed to it.
+
+This is not a small edit. Being Windows-only is what lets serving paste (§8): the argument against
+synthesizing input was a macOS permission argument, and on Windows there is no permission to ask for.
+A spec that keeps a platform it will not ship to also keeps that platform's constraints, and pays for
+them in features it declines to build.
 
 ---
 
@@ -635,20 +649,28 @@ Paste is the interesting half. The model is two distinct keystrokes:
 2. **Paste** — the user presses Ctrl+V, entirely natively. The app is not involved.
 
 The obvious alternative is a single serve-and-paste hotkey that writes the clip and then synthesizes a
-paste into the foreground window, which is what Raycast and Alfred do. **It is rejected for v1, and the
-reason is specific to this app:** synthesizing input requires Accessibility permission on macOS, which
-is effectively permission to read every keystroke on the machine. A tool whose entire claim is that it
-*cannot* spy on you should not be asking for the one permission that would let it. The system dialog
-says as much, and it would be right to.
+paste into the foreground window, which is what Raycast and Alfred do. It was rejected for v1 because
+synthesizing input requires Accessibility permission on macOS, which is effectively permission to read
+every keystroke on the machine. A tool whose entire claim is that it *cannot* spy on you should not be
+asking for the one permission that would let it.
 
-Three smaller reasons the two-step is the better default anyway:
+**Amended: serving pastes on Windows.** The objection above is entirely a macOS objection, and this is
+a Windows application (see the scope note in §1). Windows `SendInput` is *output* — it asks the OS to
+deliver a keystroke — and needs no permission, no elevation, and no keyboard hook. There is nothing to
+ask the user for and nothing to be trusted with. The three secondary arguments turned out to survive
+the change rather than oppose it:
 
-- It needs no keyboard hook and no permission prompt on either platform.
-- **The served clip stays pasteable repeatedly.** Serve once, paste into four places. A combined hotkey
-  hides that.
-- Advancing the cursor is a deliberate act rather than a side effect of pasting, which is what
-  invariant 6 asks for. A paste that silently moved the cursor would leave the user unsure where they
-  are in the spool.
+- *No keyboard hook* — still none. Sending is not listening.
+- *The served clip stays pasteable repeatedly* — still true. The clip remains on the clipboard, so
+  serve-once-paste-into-four-places still works; this adds the first paste rather than removing the
+  others.
+- *Advancing the cursor is a deliberate act* — still true. The user pressed the unspool key. That is
+  the deliberate act; the paste is its effect, not a hidden side effect of some other action.
+
+What remains true is that a synthesized `Ctrl+V` does nothing in terminals that paste with
+`Ctrl+Shift+V`, so it is a setting rather than a law, and the addon refuses to paste when Spool's own
+window is in front — unspooling is meant to put a clip into the document you were already working in.
+**macOS, if it ever ships, serves without pasting**, and the reasoning above is why.
 
 ### Hotkeys
 
@@ -1208,7 +1230,7 @@ attributed to the addon.
 
 ---
 
-### M14 — macOS packaging
+### M14 — macOS packaging *(dropped; see the scope note above)*
 
 **Gated on an Apple Developer Program membership**, which is required for a Developer ID certificate
 and for notarization; software distributed outside the Mac App Store will not launch without both. No

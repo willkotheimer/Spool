@@ -200,6 +200,8 @@ export interface AppState {
   readonly firstRun: boolean
   /** Every hotkey and whether it is live, for the panel that doubles as the reference (PLAN.md 8). */
   readonly hotkeys: readonly HotkeyView[]
+  /** Whether unspooling also pastes into the window in front (PLAN.md 8). */
+  readonly pasteOnServe: boolean
 }
 
 /** The channel names, in one place so the two sides cannot drift apart. */
@@ -227,6 +229,7 @@ export const CHANNELS = {
   acknowledgePrivacy: 'spool:acknowledge-privacy',
   toggleMode: 'spool:toggle-mode',
   setHotkey: 'spool:set-hotkey',
+  setPasteOnServe: 'spool:set-paste-on-serve',
   resetHotkey: 'spool:reset-hotkey',
   resumeCapture: 'spool:resume-capture',
   deleteSpools: 'spool:delete-spools',

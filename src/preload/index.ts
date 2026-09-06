@@ -70,6 +70,10 @@ const api = {
 
   /** The capacity advisor (PLAN.md 9): it recommends, the user decides. */
   dismissCapacityAdvice: (): Promise<void> => ipcRenderer.invoke(CHANNELS.dismissCapacityAdvice),
+  /** Whether unspooling also pastes into the window in front (PLAN.md 8). */
+  setPasteOnServe: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.setPasteOnServe, enabled),
+
   /** Change direction. On the mode pill rather than a hotkey (PLAN.md 8). */
   toggleMode: (): Promise<void> => ipcRenderer.invoke(CHANNELS.toggleMode),
 

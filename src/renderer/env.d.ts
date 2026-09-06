@@ -27,6 +27,7 @@ declare global {
     pauseCapture(): Promise<void>
     acknowledgePrivacy(): Promise<void>
     toggleMode(): Promise<void>
+    setPasteOnServe(enabled: boolean): Promise<void>
     setHotkey(action: HotkeyAction, accelerator: string): Promise<void>
     resetHotkey(action: HotkeyAction): Promise<void>
     resumeCapture(): Promise<void>

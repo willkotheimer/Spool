@@ -15,7 +15,7 @@ import {
 import { registerIpc } from './ipc'
 import { Session } from './session'
 import { explainStorageFailure, openStore, resetEverything, startFresh, storePaths } from './store'
-import { writeClipboardText } from './clipboard/writer'
+import { sendPaste, writeClipboardText } from './clipboard/writer'
 import { createTray, reportCaptureState } from './tray'
 import { loadSettings, saveSettings, settingsPath, type WindowState } from './settings'
 import {
@@ -43,7 +43,7 @@ if (!app.requestSingleInstanceLock()) {
       app.isPackaged
     )
 
-    const spoolSession = new Session(writeClipboardText)
+    const spoolSession = new Session(writeClipboardText, sendPaste)
 
     /**
      * Open the encrypted store and restore what it holds (PLAN.md 11, M6). A failure is reported
@@ -63,6 +63,7 @@ if (!app.requestSingleInstanceLock()) {
 
     spoolSession.setSeparator(settings.separator)
     spoolSession.setPrivacyAcknowledged(settings.privacyAcknowledged)
+    spoolSession.setPasteOnServe(settings.pasteOnServe)
     spoolSession.setConsentTimeout(settings.consentTimeoutSeconds)
 
     registerIpc(spoolSession, getCompactWindow, {
@@ -80,7 +81,8 @@ if (!app.requestSingleInstanceLock()) {
           activeSpoolId: spoolSession.getActiveSpoolId(),
           consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds(),
           privacyAcknowledged: true,
-          hotkeys: hotkeyOverrides()
+          hotkeys: hotkeyOverrides(),
+          pasteOnServe: spoolSession.getPasteOnServe()
         })
       },
 
@@ -123,7 +125,8 @@ if (!app.requestSingleInstanceLock()) {
           activeSpoolId: spoolSession.getActiveSpoolId(),
           consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds(),
           privacyAcknowledged: !spoolSession.isFirstRun(),
-          hotkeys: hotkeyOverrides()
+          hotkeys: hotkeyOverrides(),
+          pasteOnServe: spoolSession.getPasteOnServe()
         })
       }
     })
@@ -136,7 +139,8 @@ if (!app.requestSingleInstanceLock()) {
         activeSpoolId: spoolSession.getActiveSpoolId(),
         consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds(),
         privacyAcknowledged: !spoolSession.isFirstRun(),
-        hotkeys: hotkeyOverrides()
+        hotkeys: hotkeyOverrides(),
+        pasteOnServe: spoolSession.getPasteOnServe()
       })
     )
 

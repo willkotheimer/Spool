@@ -84,6 +84,9 @@ export function registerIpc(
   ipcMain.handle(CHANNELS.pauseCapture, () => session.pauseCapture())
   ipcMain.handle(CHANNELS.acknowledgePrivacy, () => actions.acknowledgePrivacy())
   ipcMain.handle(CHANNELS.toggleMode, () => session.toggleMode())
+  ipcMain.handle(CHANNELS.setPasteOnServe, (_event, enabled: boolean) =>
+    session.setPasteOnServe(enabled)
+  )
   ipcMain.handle(CHANNELS.setHotkey, (_event, action: HotkeyAction, accelerator: string) =>
     actions.setHotkey(action, accelerator)
   )
@@ -130,6 +133,7 @@ export function registerIpc(
     ipcMain.removeHandler(CHANNELS.pauseCapture)
     ipcMain.removeHandler(CHANNELS.acknowledgePrivacy)
     ipcMain.removeHandler(CHANNELS.toggleMode)
+    ipcMain.removeHandler(CHANNELS.setPasteOnServe)
     ipcMain.removeHandler(CHANNELS.setHotkey)
     ipcMain.removeHandler(CHANNELS.resetHotkey)
     ipcMain.removeHandler(CHANNELS.resumeCapture)

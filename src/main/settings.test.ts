@@ -27,7 +27,8 @@ describe('settings (PLAN.md 3, 8)', () => {
       activeSpoolId: 'abc',
       consentTimeoutSeconds: 45,
       privacyAcknowledged: true,
-      hotkeys: {}
+      hotkeys: {},
+      pasteOnServe: true
     })
 
     expect(loadSettings(path())).toEqual({
@@ -36,7 +37,8 @@ describe('settings (PLAN.md 3, 8)', () => {
       activeSpoolId: 'abc',
       consentTimeoutSeconds: 45,
       privacyAcknowledged: true,
-      hotkeys: {}
+      hotkeys: {},
+      pasteOnServe: true
     })
   })
 
@@ -68,7 +70,8 @@ describe('settings (PLAN.md 3, 8)', () => {
       activeSpoolId: null,
       consentTimeoutSeconds: 30,
       privacyAcknowledged: false,
-      hotkeys: {}
+      hotkeys: {},
+      pasteOnServe: true
     })
 
     // The cautious default: a settings file that says nothing about it has not agreed to anything.

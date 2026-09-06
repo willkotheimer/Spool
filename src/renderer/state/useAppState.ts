@@ -31,6 +31,7 @@ const initialState: AppState = {
   pendingJoin: null,
   firstRun: false,
   hotkeys: [],
+  pasteOnServe: true,
   capacity: {
     measure: 'bytes',
     used: 0,
