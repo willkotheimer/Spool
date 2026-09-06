@@ -52,7 +52,7 @@ export function CapacityAdvisor({
 
         {capacity.gated && capacity.candidates.length > 0 && (
           <p className="mt-2 text-[10px] text-spool-paper/35">
-            Largest first, since what matters here is space reclaimed. Starred spools are not listed
+            Largest first, since what matters here is space reclaimed. The default spool is not listed
             and will not be asked for.
           </p>
         )}

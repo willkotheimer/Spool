@@ -76,7 +76,6 @@ These hold at every commit. A change that breaks one is wrong even if it passes 
 | **Spool** | A named, ordered list of clips with a mode and a cursor. The app's central object, and its namesake. |
 | **Default spool** | The implicit rolling buffer that captures when the user has made none. Mode FIFO. Cannot be deleted; can be cleared. |
 | **Saved spool** | A spool the user named and kept, reusable across sessions and never silently trimmed. See §3 Limits. |
-| **Starred spool** | A saved spool marked to survive routine clearing. Sorts to the top. See §10. |
 | **Cursor** | The clip that the next serve will deliver. Stored as a clip **identity**, not an index. |
 | **Serve** | Write the cursor's clip to the system clipboard, then advance the cursor. |
 | **Mode** | `fifo` or `lifo`. Sets the direction the cursor travels. |
@@ -821,66 +820,31 @@ but the gate should then still refuse capture rather than trap the window.
 
 ---
 
-## 10. Starred spools
+## 10. Starred spools — removed
 
-A star marks a spool the user means to keep. Starred spools sort to the top of every list and
-survive the routine clearing that unstarred ones do not.
+**This section described a feature that was built, shipped in M11, and then taken out.** It is kept
+as a record rather than deleted, because the reasoning it contains was sound and the reason it went
+was not that the reasoning was wrong.
 
-Two clearing commands, worded so they cannot be mistaken for each other:
+A star marked a spool the user meant to keep: it sorted to the top of every list, survived Clear
+spools, and was never proposed by any capacity state. It was capped at five spools and half the byte
+budget, and the cap was enforced *before* the user could rely on it — "you can't star this" being an
+honest limit where "unstar this so we can delete it" would have been a promise revoked under
+pressure. That reserve was also load-bearing elsewhere: it was what proved the §9 capacity floor
+always solvable, since starred usage could never exceed half the budget while the floor sat at 95%.
 
-| Command | Effect |
-|---|---|
-| **Clear spools** | Deletes unstarred spools. Meant for daily use. The button states what it spares: *Clear 12 spools · 3 starred kept.* |
-| **Reset everything** | The failsafe. Deletes every spool including starred, drops the keychain entry, returns to first run. Typed confirmation, and the only operation that touches a starred spool without it being unstarred first. |
+It was removed because the person it was built for did not want it. Not because it was wrong, or
+badly built, or hard to maintain — it worked, it was tested, and it cost nothing to keep. It went
+because a feature nobody reaches for is not free: it is a star button next to every spool, a rule in
+every capacity decision, a column in the schema, and a paragraph in every explanation of what Clear
+spools does. **The cost of a feature is paid by everyone who has to read past it.**
 
-Rules:
-
-- The default spool cannot be starred. It is a buffer, not an artifact.
-- A star is unconditional. **No capacity state ever proposes deleting a starred spool, or asks for
-  it to be unstarred first.** It is not a candidate at 90%, not a candidate at 95%, and untouched by
-  Clear spools. Only the user unstars, and only Reset everything overrides it.
-- Unstarring is always available and never asks for confirmation. Starring is the commitment;
-  releasing it is not.
-
-### The reserve, and why it is not a broken promise
-
-Starring is capped at five, and **starred spools may hold at most half the store budget**
-(§3 Limits). When a star would breach that, the star is refused — and so is further capture into an
-already-starred spool that has reached it. Neither refusal ever deletes anything.
-
-Declining to make a promise is not the same act as breaking one. "You can't star this, because
-starred spools already hold half your space" is an honest limit stated before the user relies on
-it. "Unstar this so we can delete it" is a promise revoked under pressure, which is worse than never
-having offered the star.
-
-The reserve is also what makes the §9 floor solvable without touching a star, and the arithmetic is
-worth stating because it is the whole justification:
-
-> Starred usage is capped at 50% of the budget. The floor triggers at 95%. So non-starred usage at
-> the floor is at least 95% − 50% = **45% of the budget**, always available to reclaim.
-
-Because the reserve is a *fraction*, that proof holds at any budget — including a small one on a
-constrained device, which is the case that would otherwise break it.
-
-Two notes on how it behaves in practice. The ceiling is measured against real bytes, not worst-case
-ones, so a user with five ordinary starred spools will never encounter it; it engages only for
-someone keeping megabyte-scale pastes. And if a database file ever arrives with starred content
-already past the reserve — an older build, a changed cap — the floor still resolves without breaking
-the promise, because **Pause capture** and **Reset everything** are both always available. That is
-what makes Pause capture load-bearing rather than a courtesy.
-
-### On extending this
-
-Raising the starred allowance or the store budget is a coherent paid add-on. Both are local limits,
-neither needs a network, and §5 survives intact.
-
-**Cloud storage is not.** Selling synced storage means shipping an HTTP client, which deletes
-invariant 1, the CI gate that proves it, and the one sentence in the privacy panel that is the reason
-to install this instead of any of the dozen clipboard managers that already exist. It would be a
-different product wearing this one's name. If it is ever built, it belongs in a separate application
-making its own promises.
-
----
+Two consequences worth naming. The §9 floor no longer needs the solvability argument at all: with
+nothing exempt but the default spool, every saved spool is reclaimable and the proof collapses into
+arithmetic. And the `is_starred` column stays in the schema at v4, always zero, written by nothing
+and read by nothing — SQLite cannot drop a column without rebuilding the table, and rebuilding every
+user's `spools` table to reclaim one integer per row is real risk for a benefit no one can see. A
+migration is a record of what shipped, not a description of the code as it stands today.
 
 ## 11. Milestones
 
@@ -1101,7 +1065,7 @@ the same figures on demand. The v1 → v2 migration is tested against a database
 
 ---
 
-### M11 — Starred spools
+### M11 — Starred spools *(shipped, then removed; see §10)*
 
 **In scope** — `is_starred` with a forward migration — `schema_version = 4` in the end, after M9's
 retention column and M10's `last_used_at` (§7); star and unstar;

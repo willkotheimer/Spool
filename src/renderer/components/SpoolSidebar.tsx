@@ -60,7 +60,6 @@ export function SpoolSidebar({ spools }: { spools: readonly SpoolSummary[] }): J
                   ].join(' ')}
                 >
                   <span className="truncate">
-                    {spool.isStarred && <span className="mr-1 text-spool-thread">*</span>}
                     {spool.name}
                     {spool.isActive && <span className="ml-1.5 text-[10px] text-spool-thread">active</span>}
                   </span>
@@ -68,16 +67,6 @@ export function SpoolSidebar({ spools }: { spools: readonly SpoolSummary[] }): J
                 </button>
 
                 <div className="mt-0.5 flex gap-1 px-1.5 text-[10px] text-spool-paper/40">
-                  {/* Starring is the commitment and can be refused; unstarring never asks. */}
-                  {!spool.isDefault && (
-                    <button
-                      type="button"
-                      onClick={() => void window.spool.setStarred(spool.id, !spool.isStarred)}
-                      className="hover:text-spool-paper"
-                    >
-                      {spool.isStarred ? 'Unstar' : 'Star'}
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -98,7 +87,6 @@ export function SpoolSidebar({ spools }: { spools: readonly SpoolSummary[] }): J
                   </button>
                   {/* No Delete for the default spool: something has to catch the next copy. */}
                   {!spool.isDefault &&
-                    !spool.isStarred &&
                     (confirmingDelete === spool.id ? (
                       <>
                         <span className="text-spool-thread">

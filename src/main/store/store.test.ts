@@ -235,9 +235,6 @@ describe('migrations (PLAN.md 7)', () => {
     // Columns added since default to null, which is what every rule reading them expects.
     expect(spool.retentionHours).toBeNull()
     expect(spool.lastUsedAt).toBeNull()
-    // Unstarred is the safe default for a spool that predates the column: a star is a promise the
-    // app then has to honour, and one nobody made should not appear (PLAN.md 10).
-    expect(spool.isStarred).toBe(false)
   })
 
   it('upgrades a file written by the version M10 shipped', () => {
@@ -266,7 +263,6 @@ describe('migrations (PLAN.md 7)', () => {
     expect(spool.mode).toBe('lifo')
     expect(spool.retentionHours).toBe(24)
     expect(spool.lastUsedAt).toBe(NOW)
-    expect(spool.isStarred).toBe(false)
   })
 })
 

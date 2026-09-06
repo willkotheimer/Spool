@@ -148,9 +148,10 @@ export function shouldGate(measure: Measure): boolean {
 /**
  * How much has to go to get back under the floor.
  *
- * The reserve of PLAN.md 10 is what makes this always solvable without touching a star: starred
- * usage is capped at half the budget and the floor is at 95%, so at least 45% of the budget is
- * non-starred and reclaimable.
+ * Always solvable, because every saved spool is a candidate. This used to need an argument — the
+ * starred reserve was capped at half the budget so that at least 45% stayed reclaimable — and it
+ * stopped needing one when starring was removed. Nothing is exempt now except the default spool,
+ * which is a buffer rather than something the user built.
  */
 export function bytesOverFloor(storeBytes: number, cap: number): number {
   return Math.max(Math.ceil(storeBytes - cap * GATE_AT), 0)

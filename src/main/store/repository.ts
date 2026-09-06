@@ -19,7 +19,6 @@ interface SpoolRow {
   is_default: number
   retention_hours: number | null
   last_used_at: string | null
-  is_starred: number
 }
 
 interface ClipRow {
@@ -35,7 +34,7 @@ interface ClipRow {
 export function loadSpools(database: SpoolDatabase): Spool[] {
   const spools = database
     .prepare(
-      `SELECT id, name, mode, cursor_clip_id, is_default, retention_hours, last_used_at, is_starred
+      `SELECT id, name, mode, cursor_clip_id, is_default, retention_hours, last_used_at
        FROM spools ORDER BY created_at`
     )
     .all() as SpoolRow[]
@@ -73,8 +72,7 @@ export function loadSpools(database: SpoolDatabase): Spool[] {
       clips,
       cursorClipId,
       retentionHours: row.retention_hours,
-      lastUsedAt: row.last_used_at,
-      isStarred: row.is_starred === 1
+      lastUsedAt: row.last_used_at
     }
   })
 }
@@ -83,17 +81,16 @@ export function loadSpools(database: SpoolDatabase): Spool[] {
 export function saveSpool(database: SpoolDatabase, spool: Spool, now: string): void {
   const upsertSpool = database.prepare(
     `INSERT INTO spools
-       (id, name, mode, cursor_clip_id, is_default, retention_hours, last_used_at, is_starred,
+       (id, name, mode, cursor_clip_id, is_default, retention_hours, last_used_at,
         created_at, updated_at)
      VALUES (@id, @name, @mode, @cursor_clip_id, @is_default, @retention_hours, @last_used_at,
-             @is_starred, @now, @now)
+             @now, @now)
      ON CONFLICT (id) DO UPDATE SET
        name = excluded.name,
        mode = excluded.mode,
        cursor_clip_id = excluded.cursor_clip_id,
        retention_hours = excluded.retention_hours,
        last_used_at = excluded.last_used_at,
-       is_starred = excluded.is_starred,
        updated_at = excluded.updated_at`
   )
   const deleteClips = database.prepare('DELETE FROM clips WHERE spool_id = ?')
@@ -112,7 +109,6 @@ export function saveSpool(database: SpoolDatabase, spool: Spool, now: string): v
       is_default: spool.kind === 'default' ? 1 : 0,
       retention_hours: spool.retentionHours ?? null,
       last_used_at: spool.lastUsedAt ?? null,
-      is_starred: spool.isStarred ? 1 : 0,
       now
     })
 

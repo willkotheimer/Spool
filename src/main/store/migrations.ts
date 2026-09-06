@@ -81,9 +81,16 @@ const V2 = `ALTER TABLE spools ADD COLUMN retention_hours INTEGER;`
 const V3 = `ALTER TABLE spools ADD COLUMN last_used_at TEXT;`
 
 /**
- * A star marks a spool the user means to keep (PLAN.md 10). Default zero, so every spool that
- * predates the column arrives unstarred — the safe answer, since a star is a promise the app then
- * has to honour.
+ * Added for starred spools, **a feature since removed**. The column is deliberately kept.
+ *
+ * A migration is a record of what shipped, not a description of the current code: files in the
+ * wild are at v4, and rewriting history to pretend otherwise would mean either renumbering — so a
+ * v4 file believes it is current when it is not — or adding a v5 that rebuilds the `spools` table
+ * to drop one unused column. SQLite cannot drop a column without a table rebuild, and rebuilding
+ * every user's table to reclaim one integer per spool is real risk for no benefit they can see.
+ *
+ * So the column stays, always zero, written by nothing and read by nothing. It costs a byte per
+ * spool and buys the guarantee that upgrades stay boring.
  */
 const V4 = `ALTER TABLE spools ADD COLUMN is_starred INTEGER NOT NULL DEFAULT 0;`
 

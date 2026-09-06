@@ -134,8 +134,6 @@ export interface SpoolSummary {
   readonly isDefault: boolean
   /** How long clips live here, in hours, or null to keep them until removed (PLAN.md 11, M9). */
   readonly retentionHours: number | null
-  /** Marked to survive routine clearing, and never proposed by a capacity state (PLAN.md 10). */
-  readonly isStarred: boolean
 }
 
 /** A joined result waiting on a yes, because it is large enough to be felt system-wide. */
@@ -233,7 +231,6 @@ export const CHANNELS = {
   resetHotkey: 'spool:reset-hotkey',
   resumeCapture: 'spool:resume-capture',
   deleteSpools: 'spool:delete-spools',
-  setStarred: 'spool:set-starred',
   clearSpools: 'spool:clear-spools',
   deleteClip: 'spool:delete-clip',
   clearSpool: 'spool:clear-spool'
