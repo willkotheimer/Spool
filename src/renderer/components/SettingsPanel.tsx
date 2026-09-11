@@ -117,22 +117,23 @@ export function SettingsPanel({ state, onBack }: { state: AppState; onBack: () =
           </p>
         </Section>
 
-        <Section title="Unspooling">
+        <Section title="Pasting">
           <label className="flex items-start gap-2">
             <input
               type="checkbox"
-              checked={state.pasteOnServe}
-              onChange={(event) => void window.spool.setPasteOnServe(event.target.checked)}
+              checked={state.autoPaste}
+              onChange={(event) => void window.spool.setAutoPaste(event.target.checked)}
               className="mt-0.5"
             />
             <span className="text-spool-paper/50">
-              Paste the clip as well as putting it on the clipboard
+              Paste as well as putting it on the clipboard
             </span>
           </label>
           <p className="text-[10px] leading-snug text-spool-paper/35">
-            The clip stays on the clipboard either way, so you can paste it again elsewhere. Turn
-            this off if you work in a terminal that pastes with Ctrl+Shift+V, where a synthesized
-            Ctrl+V does nothing.
+            Applies to unspooling a clip and to pasting the whole spool. It stays on the clipboard
+            either way, so you can paste it again elsewhere. Two cases where it will not arrive:
+            terminals that paste with Ctrl+Shift+V, and windows running as administrator, which
+            Windows refuses synthesized input to.
           </p>
         </Section>
 

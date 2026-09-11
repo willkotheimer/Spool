@@ -325,24 +325,66 @@ Napi::Value SendPaste(const Napi::CallbackInfo& info) {
   GetWindowThreadProcessId(foreground, &foreground_pid);
   if (foreground_pid == GetCurrentProcessId()) return Napi::Boolean::New(env, false);
 
-  INPUT inputs[4] = {};
+  // **Release whatever the user is still holding first.**
+  //
+  // The hotkey that asked for this paste fires on the key *down*, so at this instant Win and Alt
+  // are almost certainly still held — the user has not let go of `Win+Alt+U` yet. Synthesizing
+  // Ctrl+V into that state delivers `Win+Alt+Ctrl+V`, which is not a paste in any application, and
+  // nothing happens. It cost a user their trust in the feature before it was understood, and it
+  // looked intermittent because a handler that happened to run after the keys came up worked fine.
+  //
+  // So: lift every modifier that is currently down, then press Ctrl+V cleanly. They are not
+  // restored afterwards. The user's own keys are still physically held and their next release is
+  // harmless, whereas re-pressing Win here would open the Start menu.
+  const WORD kModifiers[] = {VK_LWIN,   VK_RWIN,   VK_LMENU,    VK_RMENU,
+                             VK_LSHIFT, VK_RSHIFT, VK_LCONTROL, VK_RCONTROL};
 
-  inputs[0].type = INPUT_KEYBOARD;
-  inputs[0].ki.wVk = VK_CONTROL;
+  std::vector<INPUT> inputs;
+  for (WORD vk : kModifiers) {
+    if ((GetAsyncKeyState(vk) & 0x8000) == 0) continue;
+    INPUT up = {};
+    up.type = INPUT_KEYBOARD;
+    up.ki.wVk = vk;
+    up.ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs.push_back(up);
+  }
 
-  inputs[1].type = INPUT_KEYBOARD;
-  inputs[1].ki.wVk = 'V';
+  const size_t released = inputs.size();
 
-  inputs[2].type = INPUT_KEYBOARD;
-  inputs[2].ki.wVk = 'V';
-  inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+  INPUT press = {};
+  press.type = INPUT_KEYBOARD;
+  press.ki.wVk = VK_CONTROL;
+  inputs.push_back(press);
 
-  inputs[3].type = INPUT_KEYBOARD;
-  inputs[3].ki.wVk = VK_CONTROL;
-  inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+  press.ki.wVk = 'V';
+  inputs.push_back(press);
 
-  const UINT sent = SendInput(4, inputs, sizeof(INPUT));
-  return Napi::Boolean::New(env, sent == 4);
+  INPUT release = {};
+  release.type = INPUT_KEYBOARD;
+  release.ki.dwFlags = KEYEVENTF_KEYUP;
+  release.ki.wVk = 'V';
+  inputs.push_back(release);
+
+  release.ki.wVk = VK_CONTROL;
+  inputs.push_back(release);
+
+  const UINT expected = static_cast<UINT>(released + 4);
+  const UINT sent = SendInput(expected, inputs.data(), sizeof(INPUT));
+  return Napi::Boolean::New(env, sent == expected);
+}
+
+// Whether Spool's own window is the one in front.
+//
+// Asked before serving, because it decides where the clip is meant to go. If we are in front, the
+// window has to get out of the way first: the user is looking at Spool, but the clip is for
+// whatever they were working in before they opened it.
+Napi::Value ForegroundIsSelf(const Napi::CallbackInfo& info) {
+  HWND foreground = GetForegroundWindow();
+  if (foreground == nullptr) return Napi::Boolean::New(info.Env(), false);
+
+  DWORD foreground_pid = 0;
+  GetWindowThreadProcessId(foreground, &foreground_pid);
+  return Napi::Boolean::New(info.Env(), foreground_pid == GetCurrentProcessId());
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
@@ -350,6 +392,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("stop", Napi::Function::New(env, Stop));
   exports.Set("isSupported", Napi::Function::New(env, IsSupported));
   exports.Set("sendPaste", Napi::Function::New(env, SendPaste));
+  exports.Set("foregroundIsSelf", Napi::Function::New(env, ForegroundIsSelf));
   return exports;
 }
 

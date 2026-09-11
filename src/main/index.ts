@@ -15,11 +15,12 @@ import {
 import { registerIpc } from './ipc'
 import { Session } from './session'
 import { explainStorageFailure, openStore, resetEverything, startFresh, storePaths } from './store'
-import { sendPaste, writeClipboardText } from './clipboard/writer'
+import { foregroundIsSelf, sendPaste, writeClipboardText } from './clipboard/writer'
 import { createTray, reportCaptureState } from './tray'
 import { loadSettings, saveSettings, settingsPath, type WindowState } from './settings'
 import {
   createCompactWindow,
+  dismissCompactWindow,
   getCompactWindow,
   restoreWindowState,
   setWindowState,
@@ -28,6 +29,29 @@ import {
 } from './window'
 
 // One instance owns the tray icon and the hotkeys; a second launch summons the first.
+/**
+ * Paste into the window the user was actually working in (PLAN.md 8).
+ *
+ * A global hotkey does not steal focus, so normally the window they were typing in still has it and
+ * the paste simply lands. The exception is when Spool itself is in front — they summoned it and have
+ * not clicked away — and then the only sensible target is whatever they were in *before* they opened
+ * it. So the window gets out of the way first, and the paste follows once focus has moved back.
+ *
+ * The delay is the cost of that. Windows moves focus asynchronously after a window hides, and
+ * synthesizing a keystroke into the gap would deliver it nowhere.
+ */
+function pasteWhereTheUserWas(report: (pasted: boolean) => void): void {
+  if (foregroundIsSelf() && dismissCompactWindow()) {
+    setTimeout(() => report(sendPaste()), FOCUS_SETTLE_MS)
+    return
+  }
+
+  report(sendPaste())
+}
+
+/** Long enough for focus to land on the window behind ours, short enough not to be felt. */
+const FOCUS_SETTLE_MS = 120
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
@@ -43,7 +67,7 @@ if (!app.requestSingleInstanceLock()) {
       app.isPackaged
     )
 
-    const spoolSession = new Session(writeClipboardText, sendPaste)
+    const spoolSession = new Session(writeClipboardText, pasteWhereTheUserWas)
 
     /**
      * Open the encrypted store and restore what it holds (PLAN.md 11, M6). A failure is reported
@@ -63,7 +87,7 @@ if (!app.requestSingleInstanceLock()) {
 
     spoolSession.setSeparator(settings.separator)
     spoolSession.setPrivacyAcknowledged(settings.privacyAcknowledged)
-    spoolSession.setPasteOnServe(settings.pasteOnServe)
+    spoolSession.setAutoPaste(settings.autoPaste)
     spoolSession.setConsentTimeout(settings.consentTimeoutSeconds)
 
     registerIpc(spoolSession, getCompactWindow, {
@@ -82,7 +106,7 @@ if (!app.requestSingleInstanceLock()) {
           consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds(),
           privacyAcknowledged: true,
           hotkeys: hotkeyOverrides(),
-          pasteOnServe: spoolSession.getPasteOnServe()
+          autoPaste: spoolSession.getAutoPaste()
         })
       },
 
@@ -126,7 +150,7 @@ if (!app.requestSingleInstanceLock()) {
           consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds(),
           privacyAcknowledged: !spoolSession.isFirstRun(),
           hotkeys: hotkeyOverrides(),
-          pasteOnServe: spoolSession.getPasteOnServe()
+          autoPaste: spoolSession.getAutoPaste()
         })
       }
     })
@@ -140,7 +164,7 @@ if (!app.requestSingleInstanceLock()) {
         consentTimeoutSeconds: spoolSession.getConsentTimeoutSeconds(),
         privacyAcknowledged: !spoolSession.isFirstRun(),
         hotkeys: hotkeyOverrides(),
-        pasteOnServe: spoolSession.getPasteOnServe()
+        autoPaste: spoolSession.getAutoPaste()
       })
     )
 

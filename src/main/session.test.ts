@@ -32,7 +32,7 @@ const text = (value: string, sourceApp: string | null = null): ClipboardSnapshot
   sourceApp
 })
 
-function started(paste: () => boolean = () => false): {
+function started(paste: (report: (pasted: boolean) => void) => void = (r) => r(false)): {
   session: Session
   watcher: ReturnType<typeof fakeWatcher>
   written: string[]
@@ -278,9 +278,9 @@ describe('serving (PLAN.md 11, M4)', () => {
 
   it('pastes the clip it serves into the window in front', () => {
     let pastes = 0
-    const { session, watcher, written } = started(() => {
+    const { session, watcher, written } = started((report) => {
       pastes += 1
-      return true
+      report(true)
     })
     watcher.change(text('into the form'))
 
@@ -292,11 +292,11 @@ describe('serving (PLAN.md 11, M4)', () => {
 
   it('serves without pasting when the user has turned that off', () => {
     let pastes = 0
-    const { session, watcher, written } = started(() => {
+    const { session, watcher, written } = started((report) => {
       pastes += 1
-      return true
+      report(true)
     })
-    session.setPasteOnServe(false)
+    session.setAutoPaste(false)
     watcher.change(text('placed, not typed'))
 
     session.serveNext()
@@ -307,15 +307,35 @@ describe('serving (PLAN.md 11, M4)', () => {
 
   it('does not paste when there was nothing to serve', () => {
     let pastes = 0
-    const { session } = started(() => {
+    const { session } = started((report) => {
       pastes += 1
-      return true
+      report(true)
     })
 
     session.serveNext()
 
     expect(pastes).toBe(0)
     expect(session.getState().notice?.category).toBe('nothing_to_paste')
+  })
+
+  // A synthesized Ctrl+V can fail for reasons the app cannot control. Failing silently is what
+  // made the user conclude the app was broken rather than that the clip was on their clipboard.
+  it('says so when the paste did not land, and says what to do instead', () => {
+    const { session, watcher } = started((report) => report(false))
+    watcher.change(text('somewhere that refused it'))
+
+    session.serveNext()
+
+    expect(session.getState().notice?.message).toMatch(/Ctrl\+V/)
+  })
+
+  it('says nothing when the paste landed', () => {
+    const { session, watcher } = started((report) => report(true))
+    watcher.change(text('somewhere that took it'))
+
+    session.serveNext()
+
+    expect(session.getState().notice).toBeNull()
   })
 
   it('leaves the served clip on the clipboard to be pasted as often as the user likes', () => {

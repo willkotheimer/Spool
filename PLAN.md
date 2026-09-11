@@ -667,9 +667,24 @@ the change rather than oppose it:
   the deliberate act; the paste is its effect, not a hidden side effect of some other action.
 
 What remains true is that a synthesized `Ctrl+V` does nothing in terminals that paste with
-`Ctrl+Shift+V`, so it is a setting rather than a law, and the addon refuses to paste when Spool's own
-window is in front — unspooling is meant to put a clip into the document you were already working in.
-**macOS, if it ever ships, serves without pasting**, and the reasoning above is why.
+`Ctrl+Shift+V`, and Windows refuses synthesized input to a window running as administrator, so it is
+a setting rather than a law. **macOS, if it ever ships, serves without pasting**, and the reasoning
+above is why.
+
+**Measured, and the first implementation did not work at all.** A hotkey fires on the key *down*, so
+at the instant the handler runs the user is still holding `Win+Alt`. Synthesizing `Ctrl+V` into that
+state delivers `Win+Alt+Ctrl+V`, which is a paste in no application on earth, and nothing happens.
+It presented as "unspooling advances the spool but never pastes", and it looked intermittent because
+a handler that happened to run after the keys came up worked perfectly — which is how it survived a
+round of testing. **So the addon lifts every modifier that is currently down before pressing Ctrl+V**,
+and does not restore them: the user's own keys are still physically held, their release is harmless,
+and re-pressing `Win` would open the Start menu.
+
+Two consequences follow from taking the user's account seriously rather than the code's. Pasting the
+whole spool pastes too — one key that pastes and one that silently changes the clipboard is an
+inconsistency, not a design. And **a paste that does not land says so**, naming `Ctrl+V` as the way
+out, because the alternative is what happened here: a key that appears to do nothing, and a user who
+reasonably concludes the app is broken.
 
 ### Hotkeys
 

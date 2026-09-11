@@ -36,8 +36,8 @@ export interface Settings {
    * as an empty string, and is why this is a sparse map rather than a full record (PLAN.md 8).
    */
   readonly hotkeys: Partial<Record<Action, string>>
-  /** Whether serving a clip also pastes it into the foreground window (PLAN.md 8). */
-  readonly pasteOnServe: boolean
+  /** Whether placing something on the clipboard also pastes it where you were (PLAN.md 8). */
+  readonly autoPaste: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -47,7 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   consentTimeoutSeconds: 30,
   privacyAcknowledged: false,
   hotkeys: {},
-  pasteOnServe: true
+  autoPaste: true
 }
 
 export function settingsPath(userDataDirectory: string): string {
@@ -112,7 +112,9 @@ export function loadSettings(path: string): Settings {
     privacyAcknowledged: raw.privacyAcknowledged === true,
     hotkeys: readHotkeys(raw.hotkeys),
     // Absent means on: the default is the behaviour, and only an explicit false turns it off.
-    pasteOnServe: raw.pasteOnServe !== false
+    // `pasteOnServe` is the name this shipped under before it governed the whole spool as well;
+    // a settings file written by that build still says what its author meant.
+    autoPaste: raw.autoPaste !== false && (raw as { pasteOnServe?: unknown }).pasteOnServe !== false
   }
 }
 

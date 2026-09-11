@@ -133,26 +133,56 @@ export class Session {
    * which is also what lets every rule below be tested without launching the app.
    */
   /**
-   * Whether serving also pastes (PLAN.md 8). On by default: unspooling into the document you are
-   * already typing in is the thing this app is for, and making it two keystrokes made the second
-   * one feel like a tax. It stays a setting because a synthesized Ctrl+V does nothing in terminals
-   * that paste with Ctrl+Shift+V, and because some people would rather place than place-and-type.
+   * Whether putting something on the clipboard also pastes it (PLAN.md 8). On by default:
+   * unspooling into the document you are already typing in is the thing this app is for, and making
+   * it two keystrokes made the second one feel like a tax.
+   *
+   * It governs **both** placements. Unspooling pasted and pasting the whole spool did not, which
+   * made `V` a key that silently changed the clipboard and showed nothing — the inconsistency was
+   * the bug, not either half of it.
+   *
+   * It stays a setting because a synthesized Ctrl+V does nothing in terminals that paste with
+   * Ctrl+Shift+V, and because Windows refuses synthesized input to an elevated window, which no
+   * amount of care here can change.
    */
-  private pasteOnServe = true
+  private autoPaste = true
 
   constructor(
     private readonly writeText: (text: string) => void,
-    /** Synthesize the paste. Returns false when it declined — our own window was in front. */
-    private readonly paste: () => boolean = () => false
+    /**
+     * Put the clipboard where the user was working. It may have to dismiss our own window first and
+     * wait for focus to return, so the answer comes back through the callback rather than as a
+     * return value — and it always comes back, because a paste that did not land has to be said.
+     */
+    private readonly paste: (report: (pasted: boolean) => void) => void = (report) => report(false)
   ) {}
 
-  setPasteOnServe(enabled: boolean): void {
-    this.pasteOnServe = enabled
+  /**
+   * What happened to the last paste (PLAN.md 8).
+   *
+   * A synthesized Ctrl+V can fail for reasons this app cannot control — a terminal that pastes with
+   * Ctrl+Shift+V, a window running as administrator, which Windows refuses synthesized input to —
+   * and **failing silently is the worst of the options**. The user presses a key, nothing appears,
+   * and they conclude the app is broken rather than that the clip is sitting on their clipboard
+   * waiting for Ctrl+V. So it is reported, in the window, in the words of what to do next.
+   */
+  reportPasteResult(pasted: boolean): void {
+    if (pasted) return
+
+    this.notice = {
+      category: 'unsupported',
+      message: 'It is on your clipboard — press Ctrl+V. Spool could not paste into that window.'
+    }
     this.publish()
   }
 
-  getPasteOnServe(): boolean {
-    return this.pasteOnServe
+  setAutoPaste(enabled: boolean): void {
+    this.autoPaste = enabled
+    this.publish()
+  }
+
+  getAutoPaste(): boolean {
+    return this.autoPaste
   }
 
   /**
@@ -362,7 +392,7 @@ export class Session {
     // Then put it where the user was typing. The clip stays on the clipboard afterwards, so the
     // plan's reason for keeping these separate — serve once, paste into four places — still holds:
     // this adds the first paste rather than taking the others away (PLAN.md 8).
-    if (this.pasteOnServe) this.paste()
+    if (this.autoPaste) this.paste((pasted) => this.reportPasteResult(pasted))
 
     this.publish()
   }
@@ -399,8 +429,15 @@ export class Session {
     this.state = { ...this.state, pendingSelfWrite: joined.text }
     this.notice = {
       category: 'pasted_spool',
-      message: `${joined.clips} clips are on the clipboard, ready to paste`
+      message: this.autoPaste
+        ? `${joined.clips} clips pasted, and still on the clipboard`
+        : `${joined.clips} clips are on the clipboard, ready to paste`
     }
+
+    // The whole spool lands the same way a single clip does. Pasting one but not the other made
+    // this key look broken: it changed the clipboard and showed nothing (PLAN.md 8).
+    if (this.autoPaste) this.paste((pasted) => this.reportPasteResult(pasted))
+
     this.publish()
   }
 
@@ -826,7 +863,7 @@ export class Session {
       capacity: this.capacityView(),
       firstRun: this.firstRun,
       hotkeys: this.hotkeys,
-      pasteOnServe: this.pasteOnServe,
+      autoPaste: this.autoPaste,
       prompt: this.promptView(),
       privacy: {
         heuristics: HEURISTIC_RULES,

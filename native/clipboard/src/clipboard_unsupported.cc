@@ -27,11 +27,16 @@ Napi::Value SendPaste(const Napi::CallbackInfo& info) {
   return Napi::Boolean::New(info.Env(), false);
 }
 
+Napi::Value ForegroundIsSelf(const Napi::CallbackInfo& info) {
+  return Napi::Boolean::New(info.Env(), false);
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("start", Napi::Function::New(env, Start));
   exports.Set("stop", Napi::Function::New(env, Stop));
   exports.Set("isSupported", Napi::Function::New(env, IsSupported));
   exports.Set("sendPaste", Napi::Function::New(env, SendPaste));
+  exports.Set("foregroundIsSelf", Napi::Function::New(env, ForegroundIsSelf));
   return exports;
 }
 
