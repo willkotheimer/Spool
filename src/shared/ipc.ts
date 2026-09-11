@@ -76,8 +76,6 @@ export type ConsentChoice = 'keep_once' | 'skip' | 'always_keep' | 'always_skip'
 
 /** A clip held in memory, unwritten, while the user decides (PLAN.md 4). */
 export interface PendingPrompt {
-  /** 1 is what the application declared and is authoritative; 2 is a guess from shape. */
-  readonly tier: 1 | 2
   readonly headline: string
   readonly detail: string
   /** Named so the standing-answer choices can say which application they apply to. */
@@ -88,7 +86,6 @@ export interface PendingPrompt {
 
 /** What the privacy panel says Spool looks for, taken from the detectors themselves. */
 export interface PrivacyFacts {
-  readonly heuristics: ReadonlyArray<{ readonly label: string; readonly detail: string }>
   readonly consentTimeoutSeconds: number
   /** Where the encrypted store lives, or null while there is not one yet (M6). */
   readonly dataFilePath: string | null

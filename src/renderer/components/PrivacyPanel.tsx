@@ -49,21 +49,16 @@ export function PrivacyPanel({
           </p>
         </Section>
 
-        <Section title="What looks like a secret">
+        <Section title="When Spool asks">
           <p className="text-spool-paper/70">
-            Spool asks before keeping anything that matches one of these. It never decides for you,
-            and it never drops a clip on its own.
+            Spool does not read your clips looking for secrets, and does not guess. It once scanned
+            for key prefixes, connection strings and random-looking text; that was removed. Copying a
+            credential is an ordinary thing to do, and nothing here leaves this machine.
           </p>
-          <ul className="space-y-1">
-            {privacy.heuristics.map(({ label, detail }) => (
-              <li key={label} className="text-spool-paper/70">
-                <span className="text-spool-paper">{label}</span> — {detail}
-              </li>
-            ))}
-          </ul>
           <p className="text-spool-paper/70">
-            An application can also mark a copy as concealed — password managers do — and that
-            marking is treated as authoritative.
+            What remains is not a guess. An application can mark a copy as concealed — password
+            managers do, and Windows' own clipboard history obeys it — and that marking is treated as
+            authoritative.
           </p>
         </Section>
 

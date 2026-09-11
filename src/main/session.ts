@@ -47,7 +47,6 @@ import {
   ruleFromChoice
 } from './detect/consent'
 import { emptyLedger, NOTHING_TO_PASTE } from './detect/notices'
-import { HEURISTIC_RULES } from './detect/sensitivity'
 import { toSpoolView } from './ipc/view'
 import type { Store } from './store'
 
@@ -901,7 +900,6 @@ export class Session {
       autoPaste: this.autoPaste,
       prompt: this.promptView(),
       privacy: {
-        heuristics: HEURISTIC_RULES,
         consentTimeoutSeconds: Math.round(this.settings.consentTimeoutMs / 1000),
         sourceRules: [...this.state.sourceRules].map(([sourceApp, action]) => ({
           sourceApp,
@@ -953,7 +951,6 @@ export class Session {
 
     const { headline, detail } = promptWording(this.pending.sensitivity, this.pending.sourceApp)
     return {
-      tier: this.pending.sensitivity.tier,
       headline,
       detail,
       sourceApp: this.pending.sourceApp,

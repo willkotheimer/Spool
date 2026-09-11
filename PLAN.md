@@ -210,9 +210,31 @@ on a device with far less room. See §10 for the arithmetic.
 
 ## 4. Sensitive clips
 
-Two tiers, with different confidence and different wording.
+One signal: what the source application declared.
 
-### Tier 1 — Declared (authoritative)
+**Tier 2 was removed.** The app used to also guess from content — PEM blocks, JWTs, key prefixes
+like `sk-` and `AKIA`, connection-string keywords, high-entropy strings — and prompt on a match. It
+went for three reasons, in order of weight.
+
+It interrupted an ordinary workflow to say something the user already knew. **Copying a credential
+is a normal thing to do**, and the prompt arrived every time, asking permission for the thing the
+person had just deliberately done.
+
+The premise was weaker than it looked. The heuristics existed against a risk of *exposure*, but
+nothing Spool holds leaves the machine — the guarantee of §5 is the whole product. What Spool does
+change is **persistence**: a clipboard entry that would have lived until the next copy instead lives
+in an encrypted file with a visible preview. That is a real difference, and it is the honest case
+for asking. It is not a strong enough one to justify asking about every API key a developer copies.
+
+And it was the entire cost of capture: **147ms per MiB**, because each needle walked the whole
+buffer separately. Removing it took classification from 147ms to 0.003ms, because it no longer reads
+the content at all — `classify` does not take the bytes any more, which is the strongest form that
+claim can take. Two tests that failed intermittently at a five-second timeout stopped being flaky as
+a side effect.
+
+What is kept is **not a guess**, and that distinction is the whole of the decision.
+
+### What the application declared (authoritative)
 
 The source application marked the clipboard content as secret. Password managers do this.
 
@@ -221,6 +243,12 @@ The source application marked the clipboard content as secret. Password managers
 - **macOS** — pasteboard type `org.nspasteboard.ConcealedType`.
 
 Prompt names the source: *"1Password marked this as concealed. Keep it in this spool?"*
+
+`CanIncludeInClipboardHistory = 0` is an explicit statement from the application that owns the
+secret, saying *do not persist this*, and **Windows' own Clipboard History obeys it**. Spool makes a
+transient thing durable, so ignoring that request would persist exactly what a password manager asked
+it not to, and leave Spool behaving worse than the operating-system feature beside it. It costs a
+flag check and no scanning, which is why it survives the argument that removed the other tier.
 
 ### Tier 2 — Heuristic (advisory)
 

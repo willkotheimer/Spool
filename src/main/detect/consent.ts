@@ -61,25 +61,21 @@ export function keepsTheClip(choice: ConsentChoice): boolean {
  */
 export const CONSENT_TIMEOUT_MS = 30_000
 
-/** How the prompt reads. Tier 1 names the source; Tier 2 is softer, because it is a guess. */
+/**
+ * How the prompt reads. It always names the source, because the app itself is what raised this —
+ * there is no longer a softer wording for a guess, because there are no guesses.
+ */
 export function promptWording(
   sensitivity: Sensitivity,
   sourceApp: string | null
 ): { headline: string; detail: string } {
   const application = sourceApp === null ? null : sourceApp.replace(/\.exe$/i, '')
 
-  if (sensitivity.tier === 1) {
-    return {
-      headline:
-        application === null
-          ? 'That copy was marked as concealed. Keep it in this spool?'
-          : `${application} marked this as concealed. Keep it in this spool?`,
-      detail: sensitivity.rule
-    }
-  }
-
   return {
-    headline: 'This looks like a secret. Keep it in this spool?',
-    detail: `It looks like ${sensitivity.rule}.`
+    headline:
+      application === null
+        ? 'That copy was marked as concealed. Keep it in this spool?'
+        : `${application} marked this as concealed. Keep it in this spool?`,
+    detail: sensitivity.rule
   }
 }
