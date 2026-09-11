@@ -1,5 +1,6 @@
 import { byteLength } from './clip'
 import { CLIP_BYTE_CAP, DEFAULT_SPOOL_CLIP_CAP, SAVED_SPOOL_CLIP_CAP } from './limits'
+import { isSelected } from './selection'
 import type { CaptureResult, Clip, Mode, ServeResult, Spool, SpoolKind } from './types'
 
 /** The clip cap this spool is bound by (PLAN.md 3, Limits). */
@@ -100,14 +101,37 @@ export function capture(spool: Spool, clip: Clip): CaptureResult {
  * Write the cursor's clip out and advance (PLAN.md 3). **Serving pastes; it does not pop** — the
  * clip stays exactly where it was, and the cursor moves one step in the mode's direction, wrapping
  * at the end.
+ *
+ * A selection narrows what is in play: unselected clips are stepped over, so unspooling walks the
+ * chosen ones in the mode's order and wraps among them. An empty selection means every clip, so
+ * the ordinary case costs nothing.
  */
-export function serve(spool: Spool): ServeResult {
-  const index = cursorIndex(spool)
-  if (index === -1) return { ok: false, reason: 'empty', spool }
-
-  const clip = spool.clips[index]
+export function serve(spool: Spool, selection: ReadonlySet<string> = new Set()): ServeResult {
   const count = spool.clips.length
-  const next = (index + step(spool.mode) + count) % count
+  if (count === 0) return { ok: false, reason: 'empty', spool }
+
+  const eligible = (clip: Clip): boolean => isSelected(clip.id, selection)
+  if (!spool.clips.some(eligible)) return { ok: false, reason: 'empty', spool }
+
+  const start = cursorIndex(spool)
+  if (start === -1) return { ok: false, reason: 'empty', spool }
+
+  const direction = step(spool.mode)
+
+  // The cursor may be sitting on a clip the selection excludes — it was put there before the
+  // selection was made. Walk to the first one that is in play rather than refusing to serve.
+  const nextEligible = (from: number): number => {
+    let at = from
+    for (let taken = 0; taken < count; taken++) {
+      if (eligible(spool.clips[at])) return at
+      at = (at + direction + count) % count
+    }
+    return from
+  }
+
+  const index = nextEligible(start)
+  const clip = spool.clips[index]
+  const next = nextEligible((index + direction + count) % count)
 
   return { ok: true, clip, spool: { ...spool, cursorClipId: spool.clips[next].id } }
 }

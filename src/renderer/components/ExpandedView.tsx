@@ -1,7 +1,7 @@
 import { useState, type JSX } from 'react'
 import type { AppState, SeparatorKind } from '../../shared/ipc'
 import { hasChanged, sameClips } from '../helpers/ArrangeListHelper'
-import { formatBytes, separatorOptions } from '../helpers/ExpandedViewHelper'
+import { formatBytes, pasteAllLabel, separatorOptions } from '../helpers/ExpandedViewHelper'
 import { ArrangeList } from './ArrangeList'
 import { SpoolSidebar } from './SpoolSidebar'
 
@@ -134,10 +134,21 @@ export function ExpandedView({
               onClick={() => void window.spool.pasteWholeSpool()}
               className="w-full rounded border border-spool-thread/50 px-2 py-1.5 text-spool-thread hover:bg-spool-thread/10 disabled:border-spool-paper/10 disabled:text-spool-paper/25"
             >
-              Put all {spool.count} on the clipboard
+              {pasteAllLabel(spool)}
             </button>
+            {spool.hasSelection && (
+              <button
+                type="button"
+                onClick={() => void window.spool.selectAllClips()}
+                className="w-full rounded border border-spool-paper/20 px-2 py-1 text-[11px] text-spool-paper/60 hover:bg-spool-paper/10"
+              >
+                Select all {spool.count} again
+              </button>
+            )}
             <p className="text-[10px] text-spool-paper/35">
-              Then paste once, with Ctrl+V. The cursor does not move.
+              {spool.hasSelection
+                ? 'Ticked clips are the ones in play, for this button and for unspooling.'
+                : 'Then paste once, with Ctrl+V. The cursor does not move.'}
             </p>
           </div>
 

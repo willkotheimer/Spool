@@ -128,6 +128,26 @@ correctly instead of needing special cases.
 The other half of the product, and the reason reordering exists: collect a scattered set of values,
 arrange them, and put them back into one document in the right order.
 
+### Choosing which clips are in play
+
+A spool is not always wanted whole. Ticking clips narrows what the next serve delivers and what the
+whole-spool paste joins — the same working set for both, so `Win+Alt+U`, `Win+Alt+V` and the button
+can never mean different things.
+
+**An empty selection means every clip.** Selecting nothing and meaning nothing is not a state worth
+having: it would make both hotkeys dead and the button a no-op, with nothing to distinguish that
+from a bug. So clearing the selection and selecting everything are the same act, and the app offers
+one command rather than two that disagree at the edges. Unticking the last box returns to all.
+
+The selection is **not stored**. It describes what you are doing now, the way a text selection does,
+and one that survived a restart would be a rule the user does not remember making. It ends when the
+active spool changes, when the spool is cleared, and it drops any clip that is deleted — a set still
+naming a clip that is gone would make the button promise more than it can deliver.
+
+Serving steps over what is not in play, in both directions, and wraps among the chosen clips. A
+cursor sitting on an excluded clip is not an error: it was put there before the choice was made, so
+the next serve walks forward to the first clip that is in play rather than refusing.
+
 **It joins and writes once.** Every clip in the spool is concatenated with a separator and written to
 the system clipboard as a single item. The user then pastes normally, once. The alternative —
 synthesising one paste per clip — is rejected for the same reason serve-and-paste is (§8): it needs

@@ -1,4 +1,4 @@
-import type { SeparatorKind } from '../../shared/ipc'
+import type { SeparatorKind, SpoolView } from '../../shared/ipc'
 
 /** Pure helpers for the expanded window. No React, no I/O (PLAN.md 6). */
 
@@ -25,4 +25,17 @@ export function formatBytes(bytes: number): string {
   const kib = bytes / 1024
   if (kib >= 1) return `${Math.round(kib * 10) / 10} KB`
   return `${bytes} bytes`
+}
+
+/**
+ * What the whole-spool button says it will take (PLAN.md 3).
+ *
+ * It names the number in play rather than the number in the spool, because the button and the
+ * hotkey must agree: `Win+Alt+V` pastes exactly what this says. "All 15" when nothing is chosen,
+ * "3 of 15" when a subset is — the total stays visible so the selection is legible as a narrowing
+ * rather than as the whole truth.
+ */
+export function pasteAllLabel(spool: SpoolView): string {
+  if (!spool.hasSelection) return `Put all ${spool.count} on the clipboard`
+  return `Put ${spool.inPlay} of ${spool.count} on the clipboard`
 }

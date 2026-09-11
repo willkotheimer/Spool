@@ -53,6 +53,8 @@ export interface ClipView {
   readonly preview: string
   readonly capturedAt: string
   readonly sourceApp: string | null
+  /** Whether this clip is in play. True for every clip when nothing has been chosen (PLAN.md 3). */
+  readonly isSelected: boolean
 }
 
 export interface SpoolView {
@@ -63,6 +65,10 @@ export interface SpoolView {
   readonly cursorClipId: string | null
   readonly count: number
   readonly cap: number
+  /** How many clips a serve or a whole-spool paste would act on — `count` unless a subset is chosen. */
+  readonly inPlay: number
+  /** Whether the user has chosen a subset, as distinct from the empty selection that means all. */
+  readonly hasSelection: boolean
 }
 
 /** The four choices offered by the consent prompt (PLAN.md 4). */
@@ -228,6 +234,8 @@ export const CHANNELS = {
   toggleMode: 'spool:toggle-mode',
   setHotkey: 'spool:set-hotkey',
   setAutoPaste: 'spool:set-auto-paste',
+  toggleClipSelected: 'spool:toggle-clip-selected',
+  selectAllClips: 'spool:select-all-clips',
   resetHotkey: 'spool:reset-hotkey',
   resumeCapture: 'spool:resume-capture',
   deleteSpools: 'spool:delete-spools',
