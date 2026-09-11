@@ -28,7 +28,7 @@ describe('settings (PLAN.md 3, 8)', () => {
       consentTimeoutSeconds: 45,
       privacyAcknowledged: true,
       hotkeys: {},
-      pasteOnServe: true
+      autoPaste: true
     })
 
     expect(loadSettings(path())).toEqual({
@@ -38,7 +38,7 @@ describe('settings (PLAN.md 3, 8)', () => {
       consentTimeoutSeconds: 45,
       privacyAcknowledged: true,
       hotkeys: {},
-      pasteOnServe: true
+      autoPaste: true
     })
   })
 
@@ -71,7 +71,7 @@ describe('settings (PLAN.md 3, 8)', () => {
       consentTimeoutSeconds: 30,
       privacyAcknowledged: false,
       hotkeys: {},
-      pasteOnServe: true
+      autoPaste: true
     })
 
     // The cautious default: a settings file that says nothing about it has not agreed to anything.

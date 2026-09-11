@@ -107,6 +107,22 @@ export function showCompactWindow(): void {
   window.focus()
 }
 
+/**
+ * Get out of the way so a paste can land where the user was working (PLAN.md 8).
+ *
+ * Hiding returns focus to whatever had it before Spool was summoned, which is the window the clip
+ * is actually for. Returns whether anything was hidden, so the caller knows to wait for focus to
+ * settle before synthesizing anything.
+ */
+export function dismissCompactWindow(): boolean {
+  const window = compactWindow
+  if (window && window.isVisible()) {
+    window.hide()
+    return true
+  }
+  return false
+}
+
 /** The summon hotkey is a toggle: visible and focused means dismiss (PLAN.md 8). */
 export function toggleCompactWindow(): void {
   const window = compactWindow

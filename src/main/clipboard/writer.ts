@@ -32,3 +32,14 @@ export function sendPaste(): boolean {
     return false
   }
 }
+
+/** Whether Spool's own window is in front, which decides where a clip is meant to go. */
+export function foregroundIsSelf(): boolean {
+  try {
+    const require = createRequire(__filename)
+    const addon = require('spool-clipboard') as { foregroundIsSelf?: () => boolean }
+    return addon.foregroundIsSelf?.() ?? false
+  } catch {
+    return false
+  }
+}
