@@ -38,6 +38,18 @@ export function ClipList({ spool }: { spool: SpoolView }): JSX.Element {
             }
           >
             <div className="flex items-baseline gap-2">
+              {/*
+                Checked means in play. With nothing chosen every box is checked, because an empty
+                selection means every clip — so the list never shows a state the hotkeys disagree
+                with (PLAN.md 3).
+              */}
+              <input
+                type="checkbox"
+                checked={clip.isSelected}
+                onChange={() => void window.spool.toggleClipSelected(clip.id)}
+                aria-label={`Include ${clip.preview}`}
+                className="mt-0.5 shrink-0"
+              />
               <span
                 className={
                   isNext
@@ -58,7 +70,7 @@ export function ClipList({ spool }: { spool: SpoolView }): JSX.Element {
               </span>
             </div>
             {source !== null && (
-              <span className="pl-6 text-[10px] text-spool-paper/30">{source}</span>
+              <span className="pl-11 text-[10px] text-spool-paper/30">{source}</span>
             )}
           </li>
         )

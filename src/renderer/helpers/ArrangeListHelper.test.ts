@@ -40,10 +40,10 @@ describe('hasChanged', () => {
 
 describe('sourceLabel', () => {
   it('drops the extension a Windows process name carries', () => {
-    expect(sourceLabel({ id: 'a', preview: 'p', capturedAt: 'x', sourceApp: 'EXCEL.EXE' })).toBe(
+    expect(sourceLabel({ id: 'a', preview: 'p', capturedAt: 'x', sourceApp: 'EXCEL.EXE', isSelected: true })).toBe(
       'EXCEL'
     )
-    expect(sourceLabel({ id: 'a', preview: 'p', capturedAt: 'x', sourceApp: null })).toBeNull()
+    expect(sourceLabel({ id: 'a', preview: 'p', capturedAt: 'x', sourceApp: null, isSelected: true })).toBeNull()
   })
 })
 

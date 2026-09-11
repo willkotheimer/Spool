@@ -780,6 +780,115 @@ describe('pasting the whole spool (PLAN.md 3)', () => {
   })
 })
 
+describe('choosing which clips are in play (PLAN.md 3)', () => {
+  function withClips(...contents: string[]) {
+    const { session, watcher, written } = started((report) => report(true))
+    for (const content of contents) watcher.change(text(content))
+    return { session, watcher, written }
+  }
+
+  const ids = (session: Session): string[] => session.getState().spool.clips.map((c) => c.id)
+
+  it('unspools every clip when nothing has been chosen', () => {
+    const { session, written } = withClips('one', 'two', 'three')
+
+    session.serveNext()
+    session.serveNext()
+
+    expect(written).toEqual(['one', 'two'])
+    expect(session.getState().spool.inPlay).toBe(3)
+    expect(session.getState().spool.hasSelection).toBe(false)
+  })
+
+  it('steps over the clips that were not chosen', () => {
+    const { session, written } = withClips('one', 'two', 'three')
+    const [first, , third] = ids(session)
+    session.toggleClipSelected(first)
+    session.toggleClipSelected(third)
+
+    session.serveNext()
+    session.serveNext()
+
+    expect(written).toEqual(['one', 'three'])
+  })
+
+  it('wraps among the chosen clips rather than through the others', () => {
+    const { session, written } = withClips('one', 'two', 'three')
+    const [first, , third] = ids(session)
+    session.toggleClipSelected(first)
+    session.toggleClipSelected(third)
+
+    session.serveNext()
+    session.serveNext()
+    session.serveNext()
+
+    expect(written).toEqual(['one', 'three', 'one'])
+  })
+
+  it('joins only the chosen clips, in spool order', () => {
+    const { session, written } = withClips('one', 'two', 'three')
+    const [first, , third] = ids(session)
+    session.toggleClipSelected(third)
+    session.toggleClipSelected(first)
+
+    session.pasteWholeSpool()
+
+    expect(written).toEqual(['one\nthree'])
+    expect(session.getState().spool.inPlay).toBe(2)
+    expect(session.getState().spool.hasSelection).toBe(true)
+  })
+
+  it('serves a chosen clip even when the cursor sat on one that was not', () => {
+    const { session, written } = withClips('one', 'two', 'three')
+    // The cursor is on 'one'; choosing only the third must not leave serving stuck.
+    session.toggleClipSelected(ids(session)[2])
+
+    session.serveNext()
+
+    expect(written).toEqual(['three'])
+  })
+
+  it('unticking the last clip returns to all, rather than to none', () => {
+    const { session, written } = withClips('one', 'two')
+    const [first] = ids(session)
+    session.toggleClipSelected(first)
+    expect(session.getState().spool.inPlay).toBe(1)
+
+    session.toggleClipSelected(first)
+
+    expect(session.getState().spool.hasSelection).toBe(false)
+    session.pasteWholeSpool()
+    expect(written).toEqual(['one\ntwo'])
+  })
+
+  it('selecting all again is the way back, and costs nothing when already there', () => {
+    const { session } = withClips('one', 'two')
+    session.toggleClipSelected(ids(session)[0])
+
+    session.selectAllClips()
+
+    expect(session.getState().spool.hasSelection).toBe(false)
+    expect(session.getState().spool.inPlay).toBe(2)
+  })
+
+  it('forgets the choice when the clips it named are deleted', () => {
+    const { session } = withClips('one', 'two')
+    const [first] = ids(session)
+    session.toggleClipSelected(first)
+
+    session.deleteClip(first)
+
+    // The chosen clip is gone, so the set is empty — which means all of what is left.
+    expect(session.getState().spool.hasSelection).toBe(false)
+    expect(session.getState().spool.inPlay).toBe(1)
+  })
+
+  it('marks every clip as in play in the view when nothing is chosen', () => {
+    const { session } = withClips('one', 'two')
+    expect(session.getState().spool.clips.every((c) => c.isSelected)).toBe(true)
+  })
+})
+
 describe('arranging (PLAN.md 11, M7)', () => {
   it('applies an arrangement to the active spool', () => {
     const { session, watcher } = started()

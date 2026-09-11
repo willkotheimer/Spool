@@ -71,6 +71,13 @@ const api = {
   setAutoPaste: (enabled: boolean): Promise<void> =>
     ipcRenderer.invoke(CHANNELS.setAutoPaste, enabled),
 
+  /** Put one clip in or out of the working set (PLAN.md 3). */
+  toggleClipSelected: (clipId: string): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.toggleClipSelected, clipId),
+
+  /** Back to every clip. Clearing a selection and selecting all are the same act. */
+  selectAllClips: (): Promise<void> => ipcRenderer.invoke(CHANNELS.selectAllClips),
+
   /** Change direction. On the mode pill rather than a hotkey (PLAN.md 8). */
   toggleMode: (): Promise<void> => ipcRenderer.invoke(CHANNELS.toggleMode),
 
