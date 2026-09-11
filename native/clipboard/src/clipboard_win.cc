@@ -15,6 +15,7 @@
 #include <napi.h>
 #include <windows.h>
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <thread>
@@ -325,50 +326,56 @@ Napi::Value SendPaste(const Napi::CallbackInfo& info) {
   GetWindowThreadProcessId(foreground, &foreground_pid);
   if (foreground_pid == GetCurrentProcessId()) return Napi::Boolean::New(env, false);
 
-  // **Release whatever the user is still holding first.**
+  // **Lift whatever the user is holding, paste, then put it back.**
   //
-  // The hotkey that asked for this paste fires on the key *down*, so at this instant Win and Alt
-  // are almost certainly still held — the user has not let go of `Win+Alt+U` yet. Synthesizing
-  // Ctrl+V into that state delivers `Win+Alt+Ctrl+V`, which is not a paste in any application, and
-  // nothing happens. It cost a user their trust in the feature before it was understood, and it
-  // looked intermittent because a handler that happened to run after the keys came up worked fine.
+  // The hotkey fires on the key *down*, so at this instant Win and Alt are still held — the user
+  // has not let go of `Win+Alt+U`. Synthesizing Ctrl+V into that state delivers `Win+Alt+Ctrl+V`,
+  // which is a paste in no application, and nothing happens.
   //
-  // So: lift every modifier that is currently down, then press Ctrl+V cleanly. They are not
-  // restored afterwards. The user's own keys are still physically held and their next release is
-  // harmless, whereas re-pressing Win here would open the Start menu.
+  // Lifting them is only half the answer, and the half on its own is worse than the disease.
+  // Releasing keys the user is still physically holding leaves Windows believing they are up, so
+  // the *next* `U` arrives as a bare `u` and gets typed into their document. Unspooling worked
+  // once and then printed `uuuu`. **So every modifier that was down is pressed again afterwards**,
+  // and the repeat gesture survives: hold Win+Alt, tap U as often as you like.
   const WORD kModifiers[] = {VK_LWIN,   VK_RWIN,   VK_LMENU,    VK_RMENU,
                              VK_LSHIFT, VK_RSHIFT, VK_LCONTROL, VK_RCONTROL};
 
-  std::vector<INPUT> inputs;
+  std::vector<WORD> held;
   for (WORD vk : kModifiers) {
-    if ((GetAsyncKeyState(vk) & 0x8000) == 0) continue;
-    INPUT up = {};
-    up.type = INPUT_KEYBOARD;
-    up.ki.wVk = vk;
-    up.ki.dwFlags = KEYEVENTF_KEYUP;
-    inputs.push_back(up);
+    if ((GetAsyncKeyState(vk) & 0x8000) != 0) held.push_back(vk);
   }
 
-  const size_t released = inputs.size();
+  std::vector<INPUT> inputs;
+  const auto key = [&inputs](WORD vk, bool down) {
+    INPUT input = {};
+    input.type = INPUT_KEYBOARD;
+    input.ki.wVk = vk;
+    input.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+    inputs.push_back(input);
+  };
 
-  INPUT press = {};
-  press.type = INPUT_KEYBOARD;
-  press.ki.wVk = VK_CONTROL;
-  inputs.push_back(press);
+  for (WORD vk : held) key(vk, false);
 
-  press.ki.wVk = 'V';
-  inputs.push_back(press);
+  key(VK_CONTROL, true);
+  key('V', true);
+  key('V', false);
+  key(VK_CONTROL, false);
 
-  INPUT release = {};
-  release.type = INPUT_KEYBOARD;
-  release.ki.dwFlags = KEYEVENTF_KEYUP;
-  release.ki.wVk = 'V';
-  inputs.push_back(release);
+  // Put them back in the order they were found, so the user's own eventual release is the one that
+  // ends them.
+  for (WORD vk : held) key(vk, true);
 
-  release.ki.wVk = VK_CONTROL;
-  inputs.push_back(release);
+  // Re-pressing Win would otherwise open the Start menu the moment the user lets go: Windows opens
+  // it on a Win release that had no other key in between, and ours would look exactly like that.
+  // An unassigned virtual key marks the chord as used without doing anything else.
+  const bool restoredWin = std::find(held.begin(), held.end(), static_cast<WORD>(VK_LWIN)) != held.end() ||
+                           std::find(held.begin(), held.end(), static_cast<WORD>(VK_RWIN)) != held.end();
+  if (restoredWin) {
+    key(0xE8, true);
+    key(0xE8, false);
+  }
 
-  const UINT expected = static_cast<UINT>(released + 4);
+  const UINT expected = static_cast<UINT>(inputs.size());
   const UINT sent = SendInput(expected, inputs.data(), sizeof(INPUT));
   return Napi::Boolean::New(env, sent == expected);
 }

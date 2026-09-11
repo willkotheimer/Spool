@@ -676,9 +676,19 @@ at the instant the handler runs the user is still holding `Win+Alt`. Synthesizin
 state delivers `Win+Alt+Ctrl+V`, which is a paste in no application on earth, and nothing happens.
 It presented as "unspooling advances the spool but never pastes", and it looked intermittent because
 a handler that happened to run after the keys came up worked perfectly — which is how it survived a
-round of testing. **So the addon lifts every modifier that is currently down before pressing Ctrl+V**,
-and does not restore them: the user's own keys are still physically held, their release is harmless,
-and re-pressing `Win` would open the Start menu.
+round of testing. **So the addon lifts every modifier that is currently down before pressing Ctrl+V** — and
+then puts them back.
+
+Lifting them was only half the answer, and the half alone was worse than the disease. Releasing keys
+the user is still physically holding leaves Windows believing they are up, so the *next* `U` arrives
+as a bare `u` and is typed into their document: unspooling worked once and then printed `uuuu`. The
+gesture this whole design rests on — hold `Win+Alt`, tap `U` as often as you like — was broken by the
+fix for the bug above it. Restoring every modifier that was down is what makes the repeat survive.
+
+Re-pressing `Win` then threatens a Start menu, because Windows opens it on a `Win` release with no
+other key in between, and a restored `Win` looks exactly like that. An unassigned virtual key sent
+straight after marks the chord as used. Measured: `Win+Alt` held, `U` tapped three times, three
+distinct clips pasted, no stray characters, no Start menu on release.
 
 Two consequences follow from taking the user's account seriously rather than the code's. Pasting the
 whole spool pastes too — one key that pastes and one that silently changes the clipboard is an
