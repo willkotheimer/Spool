@@ -402,24 +402,23 @@ describe('consent (PLAN.md 4)', () => {
     sourceApp: 'Code.exe'
   })
 
-  it('raises a Tier 1 prompt naming the application, and files nothing yet', () => {
+  it('raises a prompt naming the application, and files nothing yet', () => {
     const { session, watcher } = started()
     watcher.change(secret('hunter2'))
 
     const { prompt, spool } = session.getState()
-    expect(prompt?.tier).toBe(1)
     expect(prompt?.headline).toBe('1Password marked this as concealed. Keep it in this spool?')
     expect(spool.count).toBe(0)
   })
 
-  it('raises a softer Tier 2 prompt for something that merely looks like a secret', () => {
+  // The heuristics are gone: copying a credential is an ordinary thing to do, and nothing Spool
+  // holds leaves the machine, so guessing at content bought nothing worth its interruption.
+  it('does not ask about something that merely looks like a secret', () => {
     const { session, watcher } = started()
     watcher.change(heuristic('AKIAIOSFODNN7EXAMPLE'))
 
-    const { prompt } = session.getState()
-    expect(prompt?.tier).toBe(2)
-    expect(prompt?.headline).toBe('This looks like a secret. Keep it in this spool?')
-    expect(prompt?.detail).toMatch(/AWS/)
+    expect(session.getState().prompt).toBeNull()
+    expect(session.getState().spool.count).toBe(1)
   })
 
   it('never shows the content of the clip it is asking about', () => {
@@ -499,10 +498,10 @@ describe('consent (PLAN.md 4)', () => {
     watcher.change(secret('from the manager'))
     session.answerConsent('always_skip')
 
-    watcher.change(heuristic('AKIAIOSFODNN7EXAMPLE'))
+    // A different application that also declares its copy concealed is still asked about.
+    watcher.change(secret('from somewhere else', 'Bitwarden.exe'))
 
-    // A different application still gets asked about.
-    expect(session.getState().prompt?.tier).toBe(2)
+    expect(session.getState().prompt?.headline).toMatch(/Bitwarden/)
   })
 
   it('an ordinary copy is never asked about', () => {

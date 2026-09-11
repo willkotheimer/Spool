@@ -39,9 +39,8 @@ export function FirstRun({
         </p>
 
         <p className="text-spool-paper/70">
-          Before anything that looks like a secret is stored, Spool asks. It looks for{' '}
-          {privacy.heuristics.map((rule) => rule.label.toLowerCase()).join(', ')}, and it treats an
-          application marking a copy as concealed — as password managers do — as authoritative. A
+          Spool does not inspect what you copy or guess whether it is a secret. When an application
+          marks a copy as concealed — as password managers do — Spool asks before keeping it, and a
           prompt left unanswered for {privacy.consentTimeoutSeconds} seconds is treated as Skip.
         </p>
 

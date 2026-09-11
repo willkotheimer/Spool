@@ -15,7 +15,6 @@ const initialState: AppState = {
   capture: { available: false, reason: null },
   prompt: null,
   privacy: {
-    heuristics: [],
     consentTimeoutSeconds: 30,
     dataFilePath: null,
     sourceRules: [],

@@ -117,13 +117,10 @@ export function captureSnapshot(
     }
   }
 
-  const sensitivity = classify(
-    {
-      formats: snapshot.formats,
-      canIncludeInClipboardHistory: snapshot.canIncludeInClipboardHistory ?? null
-    },
-    bytes
-  )
+  const sensitivity = classify({
+    formats: snapshot.formats,
+    canIncludeInClipboardHistory: snapshot.canIncludeInClipboardHistory ?? null
+  })
   const decision = decideConsent(sensitivity, snapshot.sourceApp ?? null, cleared.sourceRules)
 
   if (decision.kind === 'skip') {
