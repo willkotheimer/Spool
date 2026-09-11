@@ -18,11 +18,5 @@ export const CLIP_BYTE_CAP = 1024 * 1024
 /** The whole store's budget. The capacity advisor of PLAN.md 9 steps in well before it. */
 export const STORE_BYTE_BUDGET = 512 * 1024 * 1024
 
-/** Star another by unstarring one first. Arrives at M11. */
-export const STARRED_SPOOL_CAP = 5
-
-/** The share of the budget starred spools may hold, which keeps the capacity floor solvable. */
-export const STARRED_BUDGET_SHARE = 0.5
-
 /** How many characters of a clip the preview keeps (PLAN.md 7). */
 export const PREVIEW_LENGTH = 120

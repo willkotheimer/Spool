@@ -31,7 +31,6 @@ declare global {
     setHotkey(action: HotkeyAction, accelerator: string): Promise<void>
     resetHotkey(action: HotkeyAction): Promise<void>
     resumeCapture(): Promise<void>
-    setStarred(spoolId: string, starred: boolean): Promise<void>
     clearSpools(): Promise<void>
     deleteSpools(spoolIds: readonly string[]): Promise<void>
     clearSpool(spoolId: string): Promise<void>

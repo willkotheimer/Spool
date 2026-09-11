@@ -185,23 +185,16 @@ describe('the floor at 95% (PLAN.md 9)', () => {
     expect(ranked.map((c) => c.id)).toEqual(['vast', 'tiny'])
   })
 
-  it('is solvable with five starred spools sitting exactly at the reserve', () => {
-    // The arithmetic of PLAN.md 10: starred is capped at half the budget, the floor is at 95%, so
-    // at least 45% of the budget is non-starred and therefore reclaimable — always.
-    const reserve = STORE_BYTE_BUDGET / 2
-    const atFloor = STORE_BYTE_BUDGET * GATE_AT
-    const nonStarred = atFloor - reserve
-
-    // Five starred spools holding the whole reserve, and the rest in ordinary ones.
-    const deletable = Array.from({ length: 9 }, (_, i) =>
-      candidate({ id: `plain-${i}`, bytes: nonStarred / 9 })
+  it('is solvable at the floor, because every saved spool is a candidate', () => {
+    // This once needed the starred reserve to hold: starring was capped at half the budget so that
+    // at least 45% stayed reclaimable. With starring gone nothing is exempt but the default spool,
+    // and the argument collapses into arithmetic.
+    const atFloor = Math.ceil(STORE_BYTE_BUDGET * 0.95)
+    const spools = Array.from({ length: 10 }, (_, i) =>
+      candidate({ id: `plain-${i}`, bytes: Math.ceil(atFloor / 10) })
     )
-    const ranked = rankCandidates(deletable, 'largest')
-    const reclaimable = ranked.reduce((total, c) => total + c.bytes, 0)
 
-    // Rounded to whole bytes: writing the percentages as decimals leaves the two sides a
-    // fraction of a byte apart, which says nothing about the reserve.
-    expect(Math.round(reclaimable)).toBeGreaterThanOrEqual(Math.round(STORE_BYTE_BUDGET * 0.45))
+    const reclaimable = spools.reduce((total, spool) => total + spool.bytes, 0)
     expect(reclaimable).toBeGreaterThanOrEqual(bytesOverFloor(atFloor, STORE_BYTE_BUDGET))
   })
 })

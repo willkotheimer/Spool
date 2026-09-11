@@ -94,9 +94,6 @@ export function registerIpc(
     actions.resetHotkey(action)
   )
   ipcMain.handle(CHANNELS.resumeCapture, () => session.resumeCapture())
-  ipcMain.handle(CHANNELS.setStarred, (_event, spoolId: string, starred: boolean) =>
-    session.setStarred(spoolId, starred)
-  )
   ipcMain.handle(CHANNELS.clearSpools, () => session.clearSpools())
   ipcMain.handle(CHANNELS.deleteSpools, (_event, spoolIds: string[]) =>
     session.deleteSpools(spoolIds)
@@ -137,7 +134,6 @@ export function registerIpc(
     ipcMain.removeHandler(CHANNELS.setHotkey)
     ipcMain.removeHandler(CHANNELS.resetHotkey)
     ipcMain.removeHandler(CHANNELS.resumeCapture)
-    ipcMain.removeHandler(CHANNELS.setStarred)
     ipcMain.removeHandler(CHANNELS.clearSpools)
     ipcMain.removeHandler(CHANNELS.deleteSpools)
     ipcMain.removeHandler(CHANNELS.clearSpool)

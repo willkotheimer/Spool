@@ -62,10 +62,7 @@ const api = {
     ipcRenderer.invoke(CHANNELS.revokeSourceRule, sourceApp),
   setConsentTimeout: (seconds: number): Promise<void> =>
     ipcRenderer.invoke(CHANNELS.setConsentTimeout, seconds),
-  /** Starred spools (PLAN.md 10). Unstarring never asks; starring can be refused. */
-  setStarred: (spoolId: string, starred: boolean): Promise<void> =>
-    ipcRenderer.invoke(CHANNELS.setStarred, spoolId, starred),
-  /** Clear spools: deletes unstarred spools and spares the starred ones. */
+  /** Clear spools: deletes every saved spool, keeping the default one. */
   clearSpools: (): Promise<void> => ipcRenderer.invoke(CHANNELS.clearSpools),
 
   /** The capacity advisor (PLAN.md 9): it recommends, the user decides. */
