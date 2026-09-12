@@ -61,7 +61,11 @@ export function ExpandedView({
 
       <div className="flex min-h-0 flex-1">
         <section className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          <ArrangeList clips={orderedClips} cursorClipId={spool.cursorClipId} onChange={setDraft}
+          <ArrangeList
+            clips={orderedClips}
+            cursorClipId={spool.cursorClipId}
+            hasSelection={spool.hasSelection}
+            onChange={setDraft}
             onDelete={(clipId) => void window.spool.deleteClip(clipId)}
           />
         </section>
