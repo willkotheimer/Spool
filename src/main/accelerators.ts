@@ -52,7 +52,7 @@ export const ACTIONS: readonly Action[] = ['summon', 'serve', 'pasteAll']
 
 /** What each action is called where a person reads it. */
 export const ACTION_LABELS: Record<Action, string> = {
-  summon: 'Summon or dismiss the window',
+  summon: 'Show or hide Spool',
   serve: 'Unspool the next clip',
   pasteAll: 'Paste the whole spool'
 }
