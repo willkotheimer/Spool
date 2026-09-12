@@ -147,7 +147,7 @@ export function ExpandedView({
             )}
             <p className="text-[10px] text-spool-paper/35">
               {spool.hasSelection
-                ? 'Ticked clips are the ones in play, for this button and for unspooling.'
+                ? 'Highlighted clips are the ones in play, for this button and for unspooling.'
                 : 'Then paste once, with Ctrl+V. The cursor does not move.'}
             </p>
           </div>

@@ -130,14 +130,22 @@ arrange them, and put them back into one document in the right order.
 
 ### Choosing which clips are in play
 
-A spool is not always wanted whole. Ticking clips narrows what the next serve delivers and what the
+A spool is not always wanted whole. Choosing clips narrows what the next serve delivers and what the
 whole-spool paste joins — the same working set for both, so `Win+Alt+U`, `Win+Alt+V` and the button
 can never mean different things.
+
+**The row is the control.** Click a clip to choose it alone, Ctrl-click to add or drop one,
+Shift-click for the run from the last click — the gestures every list on the desktop already
+teaches, so there is nothing to learn and no checkbox to aim at. Chosen rows are lit and the rest
+recede, which makes a narrowed spool look narrowed; with nothing chosen nothing is lit, because
+lighting every row would say a choice had been made when none has.
 
 **An empty selection means every clip.** Selecting nothing and meaning nothing is not a state worth
 having: it would make both hotkeys dead and the button a no-op, with nothing to distinguish that
 from a bug. So clearing the selection and selecting everything are the same act, and the app offers
-one command rather than two that disagree at the edges. Unticking the last box returns to all.
+one command rather than two that disagree at the edges. Clicking the one chosen clip again,
+Ctrl-clicking the last one out, pressing Escape, and the **Select all** line under the list all do
+the same thing: back to all.
 
 The selection is **not stored**. It describes what you are doing now, the way a text selection does,
 and one that survived a restart would be a rule the user does not remember making. It ends when the

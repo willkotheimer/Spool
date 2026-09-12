@@ -1,14 +1,30 @@
-import type { JSX } from 'react'
+import { useEffect, type JSX, type KeyboardEvent, type MouseEvent } from 'react'
 import type { SpoolView } from '../../shared/ipc'
-import { clipRows, hiddenCounts, sourceLabel } from '../helpers/ClipListHelper'
+import { clipRows, gestureFor, hiddenCounts, inPlayLabel, sourceLabel } from '../helpers/ClipListHelper'
 
 /**
  * The clips in the active spool, oldest first, with the next one to serve marked (PLAN.md 8).
  * The marker is the point: the state of the spool has to be legible without opening anything.
+ *
+ * Each row is also the way to choose which clips are in play (PLAN.md 3). The row itself is the
+ * control — click to choose one, Ctrl-click to add or drop one, Shift-click for a run — the way
+ * every list on the desktop already works, so there is nothing to learn and no checkbox to aim at.
+ * Chosen rows are lit and the rest recede, so a narrowed spool looks narrowed.
  */
 export function ClipList({ spool }: { spool: SpoolView }): JSX.Element {
   const rows = clipRows(spool)
   const hidden = hiddenCounts(spool)
+
+  // Escape is the way out that needs no aim. Bound to the window rather than the list so it works
+  // wherever focus happens to be, and only while there is a selection to leave.
+  useEffect(() => {
+    if (!spool.hasSelection) return
+    const onKeyDown = (event: globalThis.KeyboardEvent): void => {
+      if (event.key === 'Escape') void window.spool.selectAllClips()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [spool.hasSelection])
 
   if (rows.length === 0) {
     return (
@@ -20,36 +36,48 @@ export function ClipList({ spool }: { spool: SpoolView }): JSX.Element {
     )
   }
 
+  const select = (clipId: string, event: MouseEvent | KeyboardEvent): void => {
+    void window.spool.selectClip(clipId, gestureFor(event))
+  }
+
   // The elided lines sit outside the scrolling list on purpose: a note about what is off-screen is
   // useless if reading it requires scrolling to the place it is describing.
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {hidden.above > 0 && <Elided count={hidden.above} where="older" />}
-      <ol className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-1">
+      <ol
+        role="listbox"
+        aria-multiselectable="true"
+        aria-label="Clips"
+        className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-1"
+      >
       {rows.map(({ clip, position, isNext }) => {
         const source = sourceLabel(clip)
+        // With nothing chosen every clip is in play, but lighting them all would say a choice had
+        // been made. So the list is only lit once it is narrowed, and then what is out recedes.
+        const chosen = spool.hasSelection && clip.isSelected
+        const out = spool.hasSelection && !clip.isSelected
         return (
           <li
             key={clip.id}
-            className={
-              isNext
-                ? 'rounded border border-spool-thread/60 bg-spool-thread/10 px-2 py-1.5'
-                : 'rounded border border-transparent px-2 py-1.5'
-            }
+            role="option"
+            aria-selected={clip.isSelected}
+            tabIndex={0}
+            onClick={(event) => select(clip.id, event)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return
+              event.preventDefault()
+              select(clip.id, event)
+            }}
+            className={[
+              'cursor-pointer rounded border px-2 py-1.5 select-none outline-none',
+              'hover:bg-spool-paper/5 focus-visible:border-spool-paper/40',
+              isNext ? 'border-spool-thread/60' : 'border-transparent',
+              chosen ? 'bg-spool-paper/10' : isNext ? 'bg-spool-thread/10' : '',
+              out ? 'opacity-40' : ''
+            ].join(' ')}
           >
             <div className="flex items-baseline gap-2">
-              {/*
-                Checked means in play. With nothing chosen every box is checked, because an empty
-                selection means every clip — so the list never shows a state the hotkeys disagree
-                with (PLAN.md 3).
-              */}
-              <input
-                type="checkbox"
-                checked={clip.isSelected}
-                onChange={() => void window.spool.toggleClipSelected(clip.id)}
-                aria-label={`Include ${clip.preview}`}
-                className="mt-0.5 shrink-0"
-              />
               <span
                 className={
                   isNext
@@ -70,13 +98,25 @@ export function ClipList({ spool }: { spool: SpoolView }): JSX.Element {
               </span>
             </div>
             {source !== null && (
-              <span className="pl-11 text-[10px] text-spool-paper/30">{source}</span>
+              <span className="pl-6 text-[10px] text-spool-paper/30">{source}</span>
             )}
           </li>
         )
       })}
       </ol>
       {hidden.below > 0 && <Elided count={hidden.below} where="newer" />}
+      {spool.hasSelection && (
+        <p className="flex shrink-0 items-baseline justify-between px-4 py-1 text-[10px] text-spool-paper/50">
+          <span>{inPlayLabel(spool)}</span>
+          <button
+            type="button"
+            onClick={() => void window.spool.selectAllClips()}
+            className="text-spool-paper/60 underline-offset-2 hover:underline"
+          >
+            Select all
+          </button>
+        </p>
+      )}
     </div>
   )
 }

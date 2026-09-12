@@ -49,3 +49,31 @@ export function toggle(selection: ReadonlySet<string>, clipId: string): Set<stri
   else next.add(clipId)
   return next
 }
+
+/**
+ * Choose one clip and nothing else. Choosing the clip that is already the whole selection clears
+ * it — which means all — so a plain click is also the way out, with no separate command to find.
+ */
+export function only(selection: ReadonlySet<string>, clipId: string): Set<string> {
+  if (selection.size === 1 && selection.has(clipId)) return new Set()
+  return new Set([clipId])
+}
+
+/**
+ * Choose the run from the anchor to this clip, inclusive, in spool order — whichever way round
+ * they were clicked. The run replaces what was chosen before, as Shift-click does everywhere
+ * else; a Shift-click with no anchor to run from is a plain click.
+ */
+export function range(
+  clips: readonly Clip[],
+  selection: ReadonlySet<string>,
+  anchorId: string | null,
+  clipId: string
+): Set<string> {
+  const from = anchorId === null ? -1 : clips.findIndex((clip) => clip.id === anchorId)
+  const to = clips.findIndex((clip) => clip.id === clipId)
+  if (from === -1 || to === -1) return only(selection, clipId)
+
+  const [start, end] = from <= to ? [from, to] : [to, from]
+  return new Set(clips.slice(start, end + 1).map((clip) => clip.id))
+}

@@ -5,6 +5,7 @@ import {
   type AppState,
   type ConsentChoice,
   type HotkeyAction,
+  type SelectGesture,
   type SeparatorKind,
   type WindowStateName
 } from '../shared/ipc'
@@ -71,9 +72,9 @@ const api = {
   setAutoPaste: (enabled: boolean): Promise<void> =>
     ipcRenderer.invoke(CHANNELS.setAutoPaste, enabled),
 
-  /** Put one clip in or out of the working set (PLAN.md 3). */
-  toggleClipSelected: (clipId: string): Promise<void> =>
-    ipcRenderer.invoke(CHANNELS.toggleClipSelected, clipId),
+  /** Change which clips are in play with one click (PLAN.md 3); the gesture says how. */
+  selectClip: (clipId: string, gesture: SelectGesture): Promise<void> =>
+    ipcRenderer.invoke(CHANNELS.selectClip, clipId, gesture),
 
   /** Back to every clip. Clearing a selection and selecting all are the same act. */
   selectAllClips: (): Promise<void> => ipcRenderer.invoke(CHANNELS.selectAllClips),

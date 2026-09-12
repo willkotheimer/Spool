@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { ClipView, SpoolView } from '../../shared/ipc'
-import { capacityLabel, clipRows, hiddenCounts, sourceLabel } from './ClipListHelper'
+import {
+  capacityLabel,
+  clipRows,
+  gestureFor,
+  hiddenCounts,
+  inPlayLabel,
+  sourceLabel
+} from './ClipListHelper'
 
 const clip = (id: string, sourceApp: string | null = null): ClipView => ({
   id,
@@ -106,5 +113,36 @@ describe('hiddenCounts', () => {
 
   it('says nothing about an empty spool', () => {
     expect(hiddenCounts(spool([], null))).toEqual({ above: 0, below: 0 })
+  })
+})
+
+describe('gestureFor', () => {
+  const keys = (held: Partial<{ shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }>) => ({
+    shiftKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    ...held
+  })
+
+  it('a bare click chooses one', () => {
+    expect(gestureFor(keys({}))).toBe('only')
+  })
+
+  it('ctrl adds or drops one, and cmd counts as ctrl', () => {
+    expect(gestureFor(keys({ ctrlKey: true }))).toBe('toggle')
+    expect(gestureFor(keys({ metaKey: true }))).toBe('toggle')
+  })
+
+  it('shift takes a run, even with ctrl held too', () => {
+    expect(gestureFor(keys({ shiftKey: true }))).toBe('range')
+    expect(gestureFor(keys({ shiftKey: true, ctrlKey: true }))).toBe('range')
+  })
+})
+
+describe('inPlayLabel', () => {
+  it('counts what is in play against the whole spool', () => {
+    expect(inPlayLabel({ ...spool(['a', 'b', 'c'], 'a'), inPlay: 2, hasSelection: true })).toBe(
+      '2 of 3 in play'
+    )
   })
 })

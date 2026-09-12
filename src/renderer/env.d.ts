@@ -1,6 +1,12 @@
 /// <reference types="vite/client" />
 
-import type { AppState, ConsentChoice, SeparatorKind, WindowStateName } from '../shared/ipc'
+import type {
+  AppState,
+  ConsentChoice,
+  SelectGesture,
+  SeparatorKind,
+  WindowStateName
+} from '../shared/ipc'
 
 declare global {
   interface SpoolApi {
@@ -27,7 +33,7 @@ declare global {
     pauseCapture(): Promise<void>
     acknowledgePrivacy(): Promise<void>
     toggleMode(): Promise<void>
-    toggleClipSelected(clipId: string): Promise<void>
+    selectClip(clipId: string, gesture: SelectGesture): Promise<void>
     selectAllClips(): Promise<void>
     setAutoPaste(enabled: boolean): Promise<void>
     setHotkey(action: HotkeyAction, accelerator: string): Promise<void>

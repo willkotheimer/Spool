@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isSelected, prune, selectedClips, selectedCount, toggle } from './selection'
+import { isSelected, only, prune, range, selectedClips, selectedCount, toggle } from './selection'
 import type { Clip } from './types'
 
 const clip = (id: string): Clip => ({
@@ -58,5 +58,41 @@ describe('prune', () => {
   // A selection still holding a deleted clip would make the button promise more than it can give.
   it('a selection emptied by deletion means all again, not none', () => {
     expect(selectedCount([clip('a')], prune([clip('a')], new Set(['gone'])))).toBe(1)
+  })
+})
+
+describe('only', () => {
+  it('chooses one clip and drops the rest', () => {
+    expect(only(new Set(['a', 'b']), 'c')).toEqual(new Set(['c']))
+  })
+
+  it('choosing the sole chosen clip again clears, which means all', () => {
+    expect(only(new Set(['a']), 'a')).toEqual(new Set())
+  })
+
+  it('choosing one of several chosen narrows to it rather than clearing', () => {
+    expect(only(new Set(['a', 'b']), 'a')).toEqual(new Set(['a']))
+  })
+})
+
+describe('range', () => {
+  it('takes the run from the anchor to the clip, inclusive', () => {
+    expect(range(clips, new Set(), 'a', 'c')).toEqual(new Set(['a', 'b', 'c']))
+  })
+
+  it('reads the same run whichever end was clicked first', () => {
+    expect(range(clips, new Set(), 'c', 'a')).toEqual(new Set(['a', 'b', 'c']))
+  })
+
+  it('replaces what was chosen before, as shift-click does everywhere', () => {
+    expect(range(clips, new Set(['c']), 'a', 'b')).toEqual(new Set(['a', 'b']))
+  })
+
+  it('is a plain click when there is no anchor', () => {
+    expect(range(clips, new Set(['a']), null, 'b')).toEqual(new Set(['b']))
+  })
+
+  it('is a plain click when the anchor has left the spool', () => {
+    expect(range(clips, new Set(), 'gone', 'b')).toEqual(new Set(['b']))
   })
 })
