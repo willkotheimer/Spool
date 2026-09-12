@@ -30,11 +30,14 @@ import { moveClip, sourceLabel } from '../helpers/ArrangeListHelper'
 export function ArrangeList({
   clips,
   cursorClipId,
+  hasSelection,
   onChange,
   onDelete
 }: {
   clips: readonly ClipView[]
   cursorClipId: string | null
+  /** Whether a subset is in play, so the rows can show it the way the compact list does. */
+  hasSelection: boolean
   onChange: (clipIds: string[]) => void
   onDelete: (clipId: string) => void
 }): JSX.Element {
@@ -75,6 +78,8 @@ export function ArrangeList({
               clip={clip}
               position={index + 1}
               isNext={clip.id === cursorClipId}
+              chosen={hasSelection && clip.isSelected}
+              out={hasSelection && !clip.isSelected}
               onMove={(direction) => onChange(moveClip(ids, index, index + direction))}
               onDelete={() => onDelete(clip.id)}
             />
@@ -89,12 +94,17 @@ function Row({
   clip,
   position,
   isNext,
+  chosen,
+  out,
   onMove,
   onDelete
 }: {
   clip: ClipView
   position: number
   isNext: boolean
+  /** Lit and receded as in the compact list, so the two views never disagree about what is in play. */
+  chosen: boolean
+  out: boolean
   onMove: (direction: -1 | 1) => void
   onDelete: () => void
 }): JSX.Element {
@@ -109,7 +119,9 @@ function Row({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={[
         'flex items-center gap-2 rounded border px-2 py-1.5',
-        isNext ? 'border-spool-thread/60 bg-spool-thread/10' : 'border-spool-paper/10',
+        isNext ? 'border-spool-thread/60' : 'border-spool-paper/10',
+        chosen ? 'bg-spool-paper/10' : isNext ? 'bg-spool-thread/10' : '',
+        out ? 'opacity-40' : '',
         isDragging ? 'opacity-60' : ''
       ].join(' ')}
     >
