@@ -62,13 +62,15 @@ nsis:
   uninstallDisplayName: Spool
 
 # The Microsoft Store target. The identity values come from the app's reservation in Partner
-# Center and cannot be guessed — build with `npm run package:store` once they are filled in.
+# Center (Store ID 9N7J7LM83RM5) — build with `npm run package:store`.
 appx:
   applicationId: Spool
-  displayName: Spool
-  publisherDisplayName: PUBLISHER_DISPLAY_NAME_FROM_PARTNER_CENTER
-  identityName: IDENTITY_NAME_FROM_PARTNER_CENTER
-  publisher: CN=PUBLISHER_ID_FROM_PARTNER_CENTER
+  # The Store requires the package's display name to match the name reserved in Partner Center,
+  # which is "Spool Clipboard" — plain "Spool" was not available.
+  displayName: Spool Clipboard
+  publisherDisplayName: Will Kotheimer
+  identityName: WillKotheimer.SpoolClipboard
+  publisher: CN=719AD8B0-98A9-4244-B722-B46BA1A544C3
   backgroundColor: '#171614'
   # Spool is a desktop app with a native clipboard listener and a compiled database module, so it
   # needs full trust rather than the sandboxed app container.
