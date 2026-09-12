@@ -8,12 +8,13 @@ import type { AppState } from '../../shared/ipc'
 type Action = { type: 'state'; state: AppState }
 
 const initialState: AppState = {
-  spool: { name: 'Default spool', mode: 'fifo', clips: [], cursorClipId: null, count: 0, cap: 50 },
+  spool: { name: 'Default spool', mode: 'fifo', clips: [], cursorClipId: null,
+    inPlay: 0,
+    hasSelection: false, count: 0, cap: 50 },
   notice: null,
   capture: { available: false, reason: null },
   prompt: null,
   privacy: {
-    heuristics: [],
     consentTimeoutSeconds: 30,
     dataFilePath: null,
     sourceRules: [],

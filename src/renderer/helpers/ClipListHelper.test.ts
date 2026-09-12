@@ -6,7 +6,8 @@ const clip = (id: string, sourceApp: string | null = null): ClipView => ({
   id,
   preview: `preview ${id}`,
   capturedAt: '2026-08-22T07:00:00.000Z',
-  sourceApp
+  sourceApp,
+  isSelected: true
 })
 
 const spool = (ids: string[], cursorClipId: string | null): SpoolView => ({
@@ -14,6 +15,8 @@ const spool = (ids: string[], cursorClipId: string | null): SpoolView => ({
   mode: 'fifo',
   clips: ids.map((id) => clip(id)),
   cursorClipId,
+  inPlay: ids.length,
+  hasSelection: false,
   count: ids.length,
   cap: 50
 })

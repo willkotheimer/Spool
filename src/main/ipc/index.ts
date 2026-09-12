@@ -85,6 +85,10 @@ export function registerIpc(
   ipcMain.handle(CHANNELS.acknowledgePrivacy, () => actions.acknowledgePrivacy())
   ipcMain.handle(CHANNELS.toggleMode, () => session.toggleMode())
   ipcMain.handle(CHANNELS.setAutoPaste, (_event, enabled: boolean) => session.setAutoPaste(enabled))
+  ipcMain.handle(CHANNELS.toggleClipSelected, (_event, clipId: string) =>
+    session.toggleClipSelected(clipId)
+  )
+  ipcMain.handle(CHANNELS.selectAllClips, () => session.selectAllClips())
   ipcMain.handle(CHANNELS.setHotkey, (_event, action: HotkeyAction, accelerator: string) =>
     actions.setHotkey(action, accelerator)
   )
@@ -129,6 +133,8 @@ export function registerIpc(
     ipcMain.removeHandler(CHANNELS.acknowledgePrivacy)
     ipcMain.removeHandler(CHANNELS.toggleMode)
     ipcMain.removeHandler(CHANNELS.setAutoPaste)
+    ipcMain.removeHandler(CHANNELS.toggleClipSelected)
+    ipcMain.removeHandler(CHANNELS.selectAllClips)
     ipcMain.removeHandler(CHANNELS.setHotkey)
     ipcMain.removeHandler(CHANNELS.resetHotkey)
     ipcMain.removeHandler(CHANNELS.resumeCapture)

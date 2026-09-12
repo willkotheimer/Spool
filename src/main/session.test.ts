@@ -402,24 +402,23 @@ describe('consent (PLAN.md 4)', () => {
     sourceApp: 'Code.exe'
   })
 
-  it('raises a Tier 1 prompt naming the application, and files nothing yet', () => {
+  it('raises a prompt naming the application, and files nothing yet', () => {
     const { session, watcher } = started()
     watcher.change(secret('hunter2'))
 
     const { prompt, spool } = session.getState()
-    expect(prompt?.tier).toBe(1)
     expect(prompt?.headline).toBe('1Password marked this as concealed. Keep it in this spool?')
     expect(spool.count).toBe(0)
   })
 
-  it('raises a softer Tier 2 prompt for something that merely looks like a secret', () => {
+  // The heuristics are gone: copying a credential is an ordinary thing to do, and nothing Spool
+  // holds leaves the machine, so guessing at content bought nothing worth its interruption.
+  it('does not ask about something that merely looks like a secret', () => {
     const { session, watcher } = started()
     watcher.change(heuristic('AKIAIOSFODNN7EXAMPLE'))
 
-    const { prompt } = session.getState()
-    expect(prompt?.tier).toBe(2)
-    expect(prompt?.headline).toBe('This looks like a secret. Keep it in this spool?')
-    expect(prompt?.detail).toMatch(/AWS/)
+    expect(session.getState().prompt).toBeNull()
+    expect(session.getState().spool.count).toBe(1)
   })
 
   it('never shows the content of the clip it is asking about', () => {
@@ -499,10 +498,10 @@ describe('consent (PLAN.md 4)', () => {
     watcher.change(secret('from the manager'))
     session.answerConsent('always_skip')
 
-    watcher.change(heuristic('AKIAIOSFODNN7EXAMPLE'))
+    // A different application that also declares its copy concealed is still asked about.
+    watcher.change(secret('from somewhere else', 'Bitwarden.exe'))
 
-    // A different application still gets asked about.
-    expect(session.getState().prompt?.tier).toBe(2)
+    expect(session.getState().prompt?.headline).toMatch(/Bitwarden/)
   })
 
   it('an ordinary copy is never asked about', () => {
@@ -777,6 +776,115 @@ describe('pasting the whole spool (PLAN.md 3)', () => {
 
     expect(written).toEqual([])
     expect(session.getState().pendingJoin).toBeNull()
+  })
+})
+
+describe('choosing which clips are in play (PLAN.md 3)', () => {
+  function withClips(...contents: string[]) {
+    const { session, watcher, written } = started((report) => report(true))
+    for (const content of contents) watcher.change(text(content))
+    return { session, watcher, written }
+  }
+
+  const ids = (session: Session): string[] => session.getState().spool.clips.map((c) => c.id)
+
+  it('unspools every clip when nothing has been chosen', () => {
+    const { session, written } = withClips('one', 'two', 'three')
+
+    session.serveNext()
+    session.serveNext()
+
+    expect(written).toEqual(['one', 'two'])
+    expect(session.getState().spool.inPlay).toBe(3)
+    expect(session.getState().spool.hasSelection).toBe(false)
+  })
+
+  it('steps over the clips that were not chosen', () => {
+    const { session, written } = withClips('one', 'two', 'three')
+    const [first, , third] = ids(session)
+    session.toggleClipSelected(first)
+    session.toggleClipSelected(third)
+
+    session.serveNext()
+    session.serveNext()
+
+    expect(written).toEqual(['one', 'three'])
+  })
+
+  it('wraps among the chosen clips rather than through the others', () => {
+    const { session, written } = withClips('one', 'two', 'three')
+    const [first, , third] = ids(session)
+    session.toggleClipSelected(first)
+    session.toggleClipSelected(third)
+
+    session.serveNext()
+    session.serveNext()
+    session.serveNext()
+
+    expect(written).toEqual(['one', 'three', 'one'])
+  })
+
+  it('joins only the chosen clips, in spool order', () => {
+    const { session, written } = withClips('one', 'two', 'three')
+    const [first, , third] = ids(session)
+    session.toggleClipSelected(third)
+    session.toggleClipSelected(first)
+
+    session.pasteWholeSpool()
+
+    expect(written).toEqual(['one\nthree'])
+    expect(session.getState().spool.inPlay).toBe(2)
+    expect(session.getState().spool.hasSelection).toBe(true)
+  })
+
+  it('serves a chosen clip even when the cursor sat on one that was not', () => {
+    const { session, written } = withClips('one', 'two', 'three')
+    // The cursor is on 'one'; choosing only the third must not leave serving stuck.
+    session.toggleClipSelected(ids(session)[2])
+
+    session.serveNext()
+
+    expect(written).toEqual(['three'])
+  })
+
+  it('unticking the last clip returns to all, rather than to none', () => {
+    const { session, written } = withClips('one', 'two')
+    const [first] = ids(session)
+    session.toggleClipSelected(first)
+    expect(session.getState().spool.inPlay).toBe(1)
+
+    session.toggleClipSelected(first)
+
+    expect(session.getState().spool.hasSelection).toBe(false)
+    session.pasteWholeSpool()
+    expect(written).toEqual(['one\ntwo'])
+  })
+
+  it('selecting all again is the way back, and costs nothing when already there', () => {
+    const { session } = withClips('one', 'two')
+    session.toggleClipSelected(ids(session)[0])
+
+    session.selectAllClips()
+
+    expect(session.getState().spool.hasSelection).toBe(false)
+    expect(session.getState().spool.inPlay).toBe(2)
+  })
+
+  it('forgets the choice when the clips it named are deleted', () => {
+    const { session } = withClips('one', 'two')
+    const [first] = ids(session)
+    session.toggleClipSelected(first)
+
+    session.deleteClip(first)
+
+    // The chosen clip is gone, so the set is empty — which means all of what is left.
+    expect(session.getState().spool.hasSelection).toBe(false)
+    expect(session.getState().spool.inPlay).toBe(1)
+  })
+
+  it('marks every clip as in play in the view when nothing is chosen', () => {
+    const { session } = withClips('one', 'two')
+    expect(session.getState().spool.clips.every((c) => c.isSelected)).toBe(true)
   })
 })
 

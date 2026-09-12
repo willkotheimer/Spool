@@ -16,16 +16,12 @@ export function ConsentPrompt({
   prompt: PendingPrompt
   onAnswer: (choice: ConsentChoice) => void
 }): JSX.Element {
+  // One voice now: the only thing that raises this is the application saying so, so there is no
+  // softer styling for a guess.
   const application = sourceName(prompt.sourceApp)
 
   return (
-    <section
-      className={
-        prompt.tier === 1
-          ? 'mx-2 mb-2 rounded border border-spool-thread/60 bg-spool-thread/10 p-2.5'
-          : 'mx-2 mb-2 rounded border border-spool-paper/20 bg-spool-paper/5 p-2.5'
-      }
-    >
+    <section className="mx-2 mb-2 rounded border border-spool-thread/60 bg-spool-thread/10 p-2.5">
       <p className="text-xs font-medium text-spool-paper">{prompt.headline}</p>
       <p className="mt-0.5 text-[11px] text-spool-paper/50">{prompt.detail}</p>
 

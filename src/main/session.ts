@@ -35,6 +35,7 @@ import {
   type MeasureName
 } from './core/capacity'
 import { expireClips, isRetentionHours } from './core/retention'
+import { prune, toggle } from './core/selection'
 import { arrange, clear, createSpool, deleteClip, serve, setMode } from './core/spool'
 import type { Clip, Mode, Spool } from './core/types'
 import type { ClipboardSnapshot } from './detect/admit'
@@ -46,7 +47,6 @@ import {
   ruleFromChoice
 } from './detect/consent'
 import { emptyLedger, NOTHING_TO_PASTE } from './detect/notices'
-import { HEURISTIC_RULES } from './detect/sensitivity'
 import { toSpoolView } from './ipc/view'
 import type { Store } from './store'
 
@@ -147,6 +147,16 @@ export class Session {
    */
   private autoPaste = true
 
+  /**
+   * Which clips are in play (PLAN.md 3). Empty means every clip, and is the state the app starts
+   * in — a selection nobody has made is not a selection of nothing.
+   *
+   * Not stored, and cleared when the active spool changes. It describes what you are doing now, the
+   * way a text selection does; one that survived a restart would be a rule the user does not
+   * remember making.
+   */
+  private selection: ReadonlySet<string> = new Set()
+
   constructor(
     private readonly writeText: (text: string) => void,
     /**
@@ -173,6 +183,22 @@ export class Session {
       category: 'unsupported',
       message: 'It is on your clipboard — press Ctrl+V. Spool could not paste into that window.'
     }
+    this.publish()
+  }
+
+  /** Put one clip in or out of the working set. */
+  toggleClipSelected(clipId: string): void {
+    this.selection = toggle(this.selection, clipId)
+    this.publish()
+  }
+
+  /**
+   * Back to every clip. Clearing the selection and selecting everything are the same act, so there
+   * is one command rather than two that quietly disagree at the edges.
+   */
+  selectAllClips(): void {
+    if (this.selection.size === 0) return
+    this.selection = new Set()
     this.publish()
   }
 
@@ -370,7 +396,7 @@ export class Session {
    * pasted as many times as the user likes.
    */
   serveNext(): void {
-    const result = serve(this.state.spool)
+    const result = serve(this.state.spool, this.selection)
 
     if (!result.ok) {
       this.notice = NOTHING_TO_PASTE
@@ -406,7 +432,7 @@ export class Session {
    * application on the machine.
    */
   pasteWholeSpool(confirmed = false): void {
-    const joined = joinSpool(this.state.spool, this.settings.separator)
+    const joined = joinSpool(this.state.spool, this.settings.separator, this.selection)
 
     if (!joined.ok) {
       this.notice = NOTHING_TO_PASTE
@@ -592,6 +618,9 @@ export class Session {
    */
   deleteClip(clipId: string): void {
     this.state = { ...this.state, spool: deleteClip(this.state.spool, clipId) }
+    // A selection holding a clip that is gone would keep counting it, so the button would promise
+    // more than it can deliver.
+    this.selection = prune(this.state.spool.clips, this.selection)
     this.publish()
   }
 
@@ -601,6 +630,8 @@ export class Session {
       this.state = { ...this.state, spool: clear(this.state.spool) }
       // The next copy is not a duplicate of something that is no longer there.
       this.state = { ...this.state, lastCapturedText: null }
+      // Every clip the working set named has gone with them.
+      this.selection = new Set()
     } else {
       this.otherSpools = this.otherSpools.map((spool) =>
         spool.id === spoolId ? clear(spool) : spool
@@ -834,6 +865,9 @@ export class Session {
     const remaining = this.otherSpools.filter((spool) => spool.id !== next.id)
 
     this.otherSpools = keepLeaving ? [...remaining, leaving] : remaining
+    // The working set named clips in the spool being left, so it ends with it. Carrying it across
+    // would leave a selection the user cannot see and did not make here.
+    this.selection = new Set()
     // Duplicate suppression compares against the last capture *in this spool*, so it resets.
     this.state = { ...this.state, spool: this.touch(next), lastCapturedText: null }
     this.savedSpool = null
@@ -841,7 +875,7 @@ export class Session {
 
   getState(): AppState {
     return {
-      spool: toSpoolView(this.state.spool),
+      spool: toSpoolView(this.state.spool, this.selection),
       notice: this.notice,
       capture: this.capture,
       storage: this.storage,
@@ -866,7 +900,6 @@ export class Session {
       autoPaste: this.autoPaste,
       prompt: this.promptView(),
       privacy: {
-        heuristics: HEURISTIC_RULES,
         consentTimeoutSeconds: Math.round(this.settings.consentTimeoutMs / 1000),
         sourceRules: [...this.state.sourceRules].map(([sourceApp, action]) => ({
           sourceApp,
@@ -918,7 +951,6 @@ export class Session {
 
     const { headline, detail } = promptWording(this.pending.sensitivity, this.pending.sourceApp)
     return {
-      tier: this.pending.sensitivity.tier,
       headline,
       detail,
       sourceApp: this.pending.sourceApp,

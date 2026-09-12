@@ -53,6 +53,8 @@ export interface ClipView {
   readonly preview: string
   readonly capturedAt: string
   readonly sourceApp: string | null
+  /** Whether this clip is in play. True for every clip when nothing has been chosen (PLAN.md 3). */
+  readonly isSelected: boolean
 }
 
 export interface SpoolView {
@@ -63,6 +65,10 @@ export interface SpoolView {
   readonly cursorClipId: string | null
   readonly count: number
   readonly cap: number
+  /** How many clips a serve or a whole-spool paste would act on — `count` unless a subset is chosen. */
+  readonly inPlay: number
+  /** Whether the user has chosen a subset, as distinct from the empty selection that means all. */
+  readonly hasSelection: boolean
 }
 
 /** The four choices offered by the consent prompt (PLAN.md 4). */
@@ -70,8 +76,6 @@ export type ConsentChoice = 'keep_once' | 'skip' | 'always_keep' | 'always_skip'
 
 /** A clip held in memory, unwritten, while the user decides (PLAN.md 4). */
 export interface PendingPrompt {
-  /** 1 is what the application declared and is authoritative; 2 is a guess from shape. */
-  readonly tier: 1 | 2
   readonly headline: string
   readonly detail: string
   /** Named so the standing-answer choices can say which application they apply to. */
@@ -82,7 +86,6 @@ export interface PendingPrompt {
 
 /** What the privacy panel says Spool looks for, taken from the detectors themselves. */
 export interface PrivacyFacts {
-  readonly heuristics: ReadonlyArray<{ readonly label: string; readonly detail: string }>
   readonly consentTimeoutSeconds: number
   /** Where the encrypted store lives, or null while there is not one yet (M6). */
   readonly dataFilePath: string | null
@@ -228,6 +231,8 @@ export const CHANNELS = {
   toggleMode: 'spool:toggle-mode',
   setHotkey: 'spool:set-hotkey',
   setAutoPaste: 'spool:set-auto-paste',
+  toggleClipSelected: 'spool:toggle-clip-selected',
+  selectAllClips: 'spool:select-all-clips',
   resetHotkey: 'spool:reset-hotkey',
   resumeCapture: 'spool:resume-capture',
   deleteSpools: 'spool:delete-spools',

@@ -1,3 +1,4 @@
+import { selectedClips } from './selection'
 import type { Spool } from './types'
 
 /**
@@ -66,10 +67,16 @@ export type JoinResult =
  * would silently drop the clips behind it. The cursor does not move: this is a bulk read, not a
  * traversal.
  */
-export function joinSpool(spool: Spool, separator: SeparatorKind): JoinResult {
-  if (spool.clips.length === 0) return { ok: false, reason: 'empty' }
+export function joinSpool(
+  spool: Spool,
+  separator: SeparatorKind,
+  selection: ReadonlySet<string> = new Set()
+): JoinResult {
+  // A selection narrows what is joined; empty means every clip, so the ordinary case is unchanged.
+  const chosen = selectedClips(spool.clips, selection)
+  if (chosen.length === 0) return { ok: false, reason: 'empty' }
 
-  const ordered = spool.mode === 'fifo' ? spool.clips : [...spool.clips].reverse()
+  const ordered = spool.mode === 'fifo' ? chosen : [...chosen].reverse()
   const text = ordered.map((clip) => clip.content).join(separatorText(separator))
 
   return {

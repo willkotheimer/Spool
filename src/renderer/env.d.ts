@@ -27,6 +27,8 @@ declare global {
     pauseCapture(): Promise<void>
     acknowledgePrivacy(): Promise<void>
     toggleMode(): Promise<void>
+    toggleClipSelected(clipId: string): Promise<void>
+    selectAllClips(): Promise<void>
     setAutoPaste(enabled: boolean): Promise<void>
     setHotkey(action: HotkeyAction, accelerator: string): Promise<void>
     resetHotkey(action: HotkeyAction): Promise<void>
