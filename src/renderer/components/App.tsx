@@ -167,7 +167,9 @@ export function App(): JSX.Element {
           <dl className="min-w-0 space-y-0.5">
             {hotkeys.map((hotkey) => (
               <Hint key={hotkey.action} keys={hotkey.described} live={hotkey.claimed}>
-                {hotkey.label.toLowerCase()}
+                {/* The hint runs on from the keys, so only the first letter drops its case:
+                    "Spool" in "Show or hide Spool" is a name, not a noun. */}
+                {hotkey.label.charAt(0).toLowerCase() + hotkey.label.slice(1)}
               </Hint>
             ))}
           </dl>
