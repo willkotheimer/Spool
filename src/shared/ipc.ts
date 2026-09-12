@@ -111,6 +111,13 @@ export type SeparatorKind = 'newline' | 'blank_line' | 'tab' | 'comma' | 'space'
 /** Which size the window is in (PLAN.md 8). */
 export type WindowStateName = 'compact' | 'expanded'
 
+/**
+ * How a click on a clip is meant to change which clips are in play, read from the modifiers held
+ * with it (PLAN.md 3). The three are the ones every list on the desktop already teaches: a plain
+ * click chooses one thing, Ctrl adds or removes one, Shift takes a run.
+ */
+export type SelectGesture = 'only' | 'toggle' | 'range'
+
 /** Enough of a spool to list it. Choosing which one captures is M8. */
 /** A standing per-application answer, listed so it can be revoked (PLAN.md 11, M9). */
 export interface SourceRuleView {
@@ -231,7 +238,7 @@ export const CHANNELS = {
   toggleMode: 'spool:toggle-mode',
   setHotkey: 'spool:set-hotkey',
   setAutoPaste: 'spool:set-auto-paste',
-  toggleClipSelected: 'spool:toggle-clip-selected',
+  selectClip: 'spool:select-clip',
   selectAllClips: 'spool:select-all-clips',
   resetHotkey: 'spool:reset-hotkey',
   resumeCapture: 'spool:resume-capture',

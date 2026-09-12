@@ -802,8 +802,8 @@ describe('choosing which clips are in play (PLAN.md 3)', () => {
   it('steps over the clips that were not chosen', () => {
     const { session, written } = withClips('one', 'two', 'three')
     const [first, , third] = ids(session)
-    session.toggleClipSelected(first)
-    session.toggleClipSelected(third)
+    session.selectClip(first, 'toggle')
+    session.selectClip(third, 'toggle')
 
     session.serveNext()
     session.serveNext()
@@ -814,8 +814,8 @@ describe('choosing which clips are in play (PLAN.md 3)', () => {
   it('wraps among the chosen clips rather than through the others', () => {
     const { session, written } = withClips('one', 'two', 'three')
     const [first, , third] = ids(session)
-    session.toggleClipSelected(first)
-    session.toggleClipSelected(third)
+    session.selectClip(first, 'toggle')
+    session.selectClip(third, 'toggle')
 
     session.serveNext()
     session.serveNext()
@@ -827,8 +827,8 @@ describe('choosing which clips are in play (PLAN.md 3)', () => {
   it('joins only the chosen clips, in spool order', () => {
     const { session, written } = withClips('one', 'two', 'three')
     const [first, , third] = ids(session)
-    session.toggleClipSelected(third)
-    session.toggleClipSelected(first)
+    session.selectClip(third, 'toggle')
+    session.selectClip(first, 'toggle')
 
     session.pasteWholeSpool()
 
@@ -840,7 +840,7 @@ describe('choosing which clips are in play (PLAN.md 3)', () => {
   it('serves a chosen clip even when the cursor sat on one that was not', () => {
     const { session, written } = withClips('one', 'two', 'three')
     // The cursor is on 'one'; choosing only the third must not leave serving stuck.
-    session.toggleClipSelected(ids(session)[2])
+    session.selectClip(ids(session)[2], 'toggle')
 
     session.serveNext()
 
@@ -850,10 +850,10 @@ describe('choosing which clips are in play (PLAN.md 3)', () => {
   it('unticking the last clip returns to all, rather than to none', () => {
     const { session, written } = withClips('one', 'two')
     const [first] = ids(session)
-    session.toggleClipSelected(first)
+    session.selectClip(first, 'toggle')
     expect(session.getState().spool.inPlay).toBe(1)
 
-    session.toggleClipSelected(first)
+    session.selectClip(first, 'toggle')
 
     expect(session.getState().spool.hasSelection).toBe(false)
     session.pasteWholeSpool()
@@ -862,7 +862,7 @@ describe('choosing which clips are in play (PLAN.md 3)', () => {
 
   it('selecting all again is the way back, and costs nothing when already there', () => {
     const { session } = withClips('one', 'two')
-    session.toggleClipSelected(ids(session)[0])
+    session.selectClip(ids(session)[0], 'toggle')
 
     session.selectAllClips()
 
@@ -873,7 +873,7 @@ describe('choosing which clips are in play (PLAN.md 3)', () => {
   it('forgets the choice when the clips it named are deleted', () => {
     const { session } = withClips('one', 'two')
     const [first] = ids(session)
-    session.toggleClipSelected(first)
+    session.selectClip(first, 'toggle')
 
     session.deleteClip(first)
 
@@ -885,6 +885,79 @@ describe('choosing which clips are in play (PLAN.md 3)', () => {
   it('marks every clip as in play in the view when nothing is chosen', () => {
     const { session } = withClips('one', 'two')
     expect(session.getState().spool.clips.every((c) => c.isSelected)).toBe(true)
+  })
+
+  it('a plain click chooses that clip alone, whatever was chosen before', () => {
+    const { session, written } = withClips('one', 'two', 'three')
+    const [first, second] = ids(session)
+    session.selectClip(first, 'toggle')
+    session.selectClip(second, 'toggle')
+
+    session.selectClip(second, 'only')
+
+    expect(session.getState().spool.inPlay).toBe(1)
+    session.pasteWholeSpool()
+    expect(written).toEqual(['two'])
+  })
+
+  it('clicking the one chosen clip again is the way back to all', () => {
+    const { session } = withClips('one', 'two')
+    const [first] = ids(session)
+    session.selectClip(first, 'only')
+
+    session.selectClip(first, 'only')
+
+    expect(session.getState().spool.hasSelection).toBe(false)
+  })
+
+  it('a shift-click takes the run from the last click, in spool order either way round', () => {
+    const { session, written } = withClips('one', 'two', 'three', 'four')
+    const [, second, , fourth] = ids(session)
+    session.selectClip(fourth, 'only')
+
+    session.selectClip(second, 'range')
+
+    expect(session.getState().spool.inPlay).toBe(3)
+    session.pasteWholeSpool()
+    expect(written).toEqual(['two\nthree\nfour'])
+  })
+
+  it('a second shift-click moves the far end of the same run', () => {
+    const { session, written } = withClips('one', 'two', 'three', 'four')
+    const [first, second, , fourth] = ids(session)
+    session.selectClip(first, 'only')
+    session.selectClip(fourth, 'range')
+
+    session.selectClip(second, 'range')
+
+    session.pasteWholeSpool()
+    expect(written).toEqual(['one\ntwo'])
+  })
+
+  it('a shift-click with nothing to run from is a plain click', () => {
+    const { session } = withClips('one', 'two', 'three')
+    session.selectClip(ids(session)[2], 'range')
+
+    expect(session.getState().spool.inPlay).toBe(1)
+  })
+
+  it('the run starts again from wherever the selection was last cleared', () => {
+    const { session } = withClips('one', 'two', 'three')
+    const [first, , third] = ids(session)
+    session.selectClip(first, 'only')
+    session.selectAllClips()
+
+    // The anchor went with the selection: this run has no start, so it is a single choice.
+    session.selectClip(third, 'range')
+
+    expect(session.getState().spool.inPlay).toBe(1)
+  })
+
+  it('ignores a click on a clip that is not in this spool', () => {
+    const { session } = withClips('one')
+    session.selectClip('not-a-clip', 'only')
+
+    expect(session.getState().spool.hasSelection).toBe(false)
   })
 })
 

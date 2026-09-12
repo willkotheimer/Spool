@@ -5,6 +5,7 @@ import type {
   HotkeyView,
   Notice,
   PendingPrompt,
+  SelectGesture,
   StorageStatus
 } from '../shared/ipc'
 import {
@@ -35,7 +36,7 @@ import {
   type MeasureName
 } from './core/capacity'
 import { expireClips, isRetentionHours } from './core/retention'
-import { prune, toggle } from './core/selection'
+import { only, prune, range, toggle } from './core/selection'
 import { arrange, clear, createSpool, deleteClip, serve, setMode } from './core/spool'
 import type { Clip, Mode, Spool } from './core/types'
 import type { ClipboardSnapshot } from './detect/admit'
@@ -157,6 +158,12 @@ export class Session {
    */
   private selection: ReadonlySet<string> = new Set()
 
+  /**
+   * The clip a Shift-click runs from: the one last chosen on its own or toggled. It lives and dies
+   * with the selection, so nothing here has to remember to reset it separately.
+   */
+  private selectionAnchor: string | null = null
+
   constructor(
     private readonly writeText: (text: string) => void,
     /**
@@ -186,9 +193,28 @@ export class Session {
     this.publish()
   }
 
-  /** Put one clip in or out of the working set. */
-  toggleClipSelected(clipId: string): void {
-    this.selection = toggle(this.selection, clipId)
+  /**
+   * Change which clips are in play with one click (PLAN.md 3). A plain click chooses that clip
+   * alone, Ctrl adds or removes it, Shift takes the run from the last plain or Ctrl click.
+   */
+  selectClip(clipId: string, gesture: SelectGesture): void {
+    if (!this.state.spool.clips.some((clip) => clip.id === clipId)) return
+
+    switch (gesture) {
+      case 'only':
+        this.selection = only(this.selection, clipId)
+        this.selectionAnchor = clipId
+        break
+      case 'toggle':
+        this.selection = toggle(this.selection, clipId)
+        this.selectionAnchor = clipId
+        break
+      case 'range':
+        this.selection = range(this.state.spool.clips, this.selection, this.selectionAnchor, clipId)
+        // The anchor stays put, so a second Shift-click adjusts the far end of the same run.
+        if (this.selectionAnchor === null) this.selectionAnchor = clipId
+        break
+    }
     this.publish()
   }
 
@@ -198,8 +224,13 @@ export class Session {
    */
   selectAllClips(): void {
     if (this.selection.size === 0) return
-    this.selection = new Set()
+    this.forgetSelection()
     this.publish()
+  }
+
+  private forgetSelection(): void {
+    this.selection = new Set()
+    this.selectionAnchor = null
   }
 
   setAutoPaste(enabled: boolean): void {
@@ -621,6 +652,7 @@ export class Session {
     // A selection holding a clip that is gone would keep counting it, so the button would promise
     // more than it can deliver.
     this.selection = prune(this.state.spool.clips, this.selection)
+    if (this.selectionAnchor === clipId) this.selectionAnchor = null
     this.publish()
   }
 
@@ -631,7 +663,7 @@ export class Session {
       // The next copy is not a duplicate of something that is no longer there.
       this.state = { ...this.state, lastCapturedText: null }
       // Every clip the working set named has gone with them.
-      this.selection = new Set()
+      this.forgetSelection()
     } else {
       this.otherSpools = this.otherSpools.map((spool) =>
         spool.id === spoolId ? clear(spool) : spool
@@ -867,7 +899,7 @@ export class Session {
     this.otherSpools = keepLeaving ? [...remaining, leaving] : remaining
     // The working set named clips in the spool being left, so it ends with it. Carrying it across
     // would leave a selection the user cannot see and did not make here.
-    this.selection = new Set()
+    this.forgetSelection()
     // Duplicate suppression compares against the last capture *in this spool*, so it resets.
     this.state = { ...this.state, spool: this.touch(next), lastCapturedText: null }
     this.savedSpool = null

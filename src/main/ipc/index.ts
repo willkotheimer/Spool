@@ -6,7 +6,7 @@ import {
   type SeparatorKind,
   type WindowStateName
 } from '../../shared/ipc'
-import type { HotkeyAction } from '../../shared/ipc'
+import type { HotkeyAction, SelectGesture } from '../../shared/ipc'
 import type { Session } from '../session'
 
 /**
@@ -85,8 +85,8 @@ export function registerIpc(
   ipcMain.handle(CHANNELS.acknowledgePrivacy, () => actions.acknowledgePrivacy())
   ipcMain.handle(CHANNELS.toggleMode, () => session.toggleMode())
   ipcMain.handle(CHANNELS.setAutoPaste, (_event, enabled: boolean) => session.setAutoPaste(enabled))
-  ipcMain.handle(CHANNELS.toggleClipSelected, (_event, clipId: string) =>
-    session.toggleClipSelected(clipId)
+  ipcMain.handle(CHANNELS.selectClip, (_event, clipId: string, gesture: SelectGesture) =>
+    session.selectClip(clipId, gesture)
   )
   ipcMain.handle(CHANNELS.selectAllClips, () => session.selectAllClips())
   ipcMain.handle(CHANNELS.setHotkey, (_event, action: HotkeyAction, accelerator: string) =>
@@ -133,7 +133,7 @@ export function registerIpc(
     ipcMain.removeHandler(CHANNELS.acknowledgePrivacy)
     ipcMain.removeHandler(CHANNELS.toggleMode)
     ipcMain.removeHandler(CHANNELS.setAutoPaste)
-    ipcMain.removeHandler(CHANNELS.toggleClipSelected)
+    ipcMain.removeHandler(CHANNELS.selectClip)
     ipcMain.removeHandler(CHANNELS.selectAllClips)
     ipcMain.removeHandler(CHANNELS.setHotkey)
     ipcMain.removeHandler(CHANNELS.resetHotkey)

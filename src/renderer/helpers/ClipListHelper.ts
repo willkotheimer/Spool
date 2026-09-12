@@ -1,4 +1,4 @@
-import type { ClipView, SpoolView } from '../../shared/ipc'
+import type { ClipView, SelectGesture, SpoolView } from '../../shared/ipc'
 
 /** Pure helpers for the compact window's clip list. No React, no I/O (PLAN.md 6). */
 
@@ -63,4 +63,26 @@ export function capacityLabel(spool: SpoolView): string {
 export function sourceLabel(clip: ClipView): string | null {
   if (clip.sourceApp === null) return null
   return clip.sourceApp.replace(/\.exe$/i, '')
+}
+
+/**
+ * Which selection gesture a click carries, from the modifiers held with it (PLAN.md 3).
+ *
+ * Shift wins over Ctrl, so Ctrl+Shift+click is a run — the desktop's own lists do the same, and
+ * inventing a distinct meaning for the pair would be one more thing to learn. Cmd counts as Ctrl
+ * for the day this runs on a Mac.
+ */
+export function gestureFor(modifiers: {
+  readonly shiftKey: boolean
+  readonly ctrlKey: boolean
+  readonly metaKey: boolean
+}): SelectGesture {
+  if (modifiers.shiftKey) return 'range'
+  if (modifiers.ctrlKey || modifiers.metaKey) return 'toggle'
+  return 'only'
+}
+
+/** The line under the list that admits a selection is narrowing things, and how much. */
+export function inPlayLabel(spool: SpoolView): string {
+  return `${spool.inPlay} of ${spool.count} in play`
 }
